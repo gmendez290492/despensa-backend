@@ -1,0 +1,73 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: despensa-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-despensa}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-despensa_dev_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-despensa}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-despensa} -d ${POSTGRES_DB:-despensa}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: despensa-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-despensa}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:-despensa_dev_pass}
+    ports:
+      - "5672:5672"
+      - "15672:15672" # Panel web de administración
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  mailpit:
+    image: axllent/mailpit:v1.21
+    container_name: despensa-mailpit
+    ports:
+      - "1025:1025" # SMTP local
+      - "8025:8025" # Panel web para ver correos interceptados
+
+  api:
+    build:
+      context: .
+      target: dev
+    container_name: despensa-api
+    environment:
+      APP_NAME: ${APP_NAME:-Despensa API}
+      ENVIRONMENT: ${ENVIRONMENT:-local}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://despensa:despensa_dev_pass@postgres:5432/despensa}
+      RABBITMQ_URL: ${RABBITMQ_URL:-amqp://despensa:despensa_dev_pass@rabbitmq:5672/}
+      SMTP_HOST: ${SMTP_HOST:-mailpit}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      PYTHONPATH: /app/src
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./src:/app/src
+      - ./tests:/app/tests
+      - ./pyproject.toml:/app/pyproject.toml
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+
+volumes:
+  postgres_data:
+  rabbitmq_data:

@@ -1,0 +1,85 @@
+name: CI - Calidad, Seguridad y Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  quality-and-tests:
+    name: Lint, Tipado, SAST y Pytest
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Descargar código
+        uses: actions/checkout@v4
+
+      - name: Instalar uv y Python 3.12
+        uses: astral-sh/setup-uv@v4
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependencias
+        run: uv sync
+
+      - name: Verificar estilo y reglas de seguridad (Ruff)
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+
+      - name: Verificar tipado estático (Mypy)
+        run: uv run mypy src
+
+      - name: Análisis estático de seguridad SAST (Bandit)
+        run: uv run bandit -c pyproject.toml -r src
+
+      - name: Auditoría de vulnerabilidades en dependencias (pip-audit)
+        run: uv run pip-audit
+
+      - name: Ejecutar pruebas unitarias (Pytest)
+        run: uv run pytest -v
+
+  secret-scan:
+    name: Detección de Secretos (Gitleaks)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Descargar historial completo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Escanear secretos con Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  container-security:
+    name: Build Docker y Escaneo Trivy
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Descargar código
+        uses: actions/checkout@v4
+
+      - name: Construir imagen de producción
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: prod
+          push: false
+          load: true
+          tags: despensa-api:ci
+
+      - name: Escanear imagen con Trivy (CVEs Críticos/Altos)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: despensa-api:ci
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          severity: CRITICAL,HIGH
