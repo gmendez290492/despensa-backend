@@ -22,6 +22,7 @@ from app.core.health import (
 from app.core.logging import configure_logging
 from app.core.middleware import CorrelationIdMiddleware
 from app.core.security import InMemoryRateLimiter
+from app.modules.notifications.router import router as notifications_router
 from app.modules.pantry.router import router as pantry_router
 from app.modules.users.router import router as users_router
 
@@ -78,6 +79,7 @@ def create_app() -> FastAPI:
     register_exception_handlers(app)
     app.include_router(users_router)
     app.include_router(pantry_router)
+    app.include_router(notifications_router)
 
     @app.get("/", tags=["meta"])
     async def root() -> dict[str, str]:

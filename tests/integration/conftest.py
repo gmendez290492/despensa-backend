@@ -9,6 +9,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
+import app.modules.notifications.models  # noqa: F401
 import app.modules.pantry.models  # noqa: F401
 import app.modules.users.models  # noqa: F401
 import app.shared.outbox  # noqa: F401
@@ -73,8 +74,8 @@ async def db_engine(test_settings: Settings) -> AsyncIterator[AsyncEngine]:
         await conn.execute(
             text(
                 "TRUNCATE TABLE refresh_tokens, users, outbox_events, processed_events, "
-                "stock_movements, food_batches, locations, pantry_members, pantries, "
-                "products, categories, units_of_measure CASCADE",
+                "notifications, stock_movements, food_batches, locations, pantry_members, "
+                "pantries, products, categories, units_of_measure CASCADE",
             ),
         )
         await conn.execute(
