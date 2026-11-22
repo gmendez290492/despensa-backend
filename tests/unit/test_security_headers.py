@@ -18,3 +18,9 @@ def test_security_headers_are_present_in_responses() -> None:
         assert response.headers["X-XSS-Protection"] == "1; mode=block"
         assert "default-src 'none'" in response.headers["Content-Security-Policy"]
         assert "X-Correlation-ID" in response.headers
+
+        # Documentación Swagger UI debe permitir recursos necesarios de CDN
+        docs_res = client.get("/docs")
+        assert docs_res.status_code == 200
+        assert "https://cdn.jsdelivr.net" in docs_res.headers["Content-Security-Policy"]
+        assert "'unsafe-inline'" in docs_res.headers["Content-Security-Policy"]
