@@ -1,0 +1,5 @@
+aws_region                = "us-east-1"
+environment               = "dev"
+db_password               = "SuperSecretPostgresPassword123!"
+jwt_secret_key            = "dev-environment-super-secure-jwt-key-32chars"
+budget_notification_email = "tu-correo@example.com"

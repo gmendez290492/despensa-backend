@@ -1,0 +1,10 @@
+title = "Gitleaks Configuration for Despensa Backend"
+
+[allowlist]
+description = "Permitir claves y secretos simulados en tests, docs y configs de desarrollo local"
+paths = [
+    '''tests/.*''',
+    '''docs/.*''',
+    '''\.env\.example''',
+    '''docker-compose\.ya?ml''',
+]

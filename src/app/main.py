@@ -10,7 +10,8 @@ from fastapi import Depends, FastAPI, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.core.config import Settings, get_settings
-from app.core.database import create_db_engine
+from app.core.database import create_db_engine, create_session_factory
+from app.core.exceptions import register_exception_handlers
 from app.core.health import (
     HealthCheckFn,
     LivenessResponse,
@@ -19,6 +20,12 @@ from app.core.health import (
     check_rabbitmq,
 )
 from app.core.logging import configure_logging
+from app.core.middleware import CorrelationIdMiddleware, SecurityHeadersMiddleware
+from app.core.security import InMemoryRateLimiter
+from app.modules.notifications.router import router as notifications_router
+from app.modules.pantry.router import router as pantry_router
+from app.modules.recipes.router import router as recipes_router
+from app.modules.users.router import router as users_router
 
 logger = structlog.get_logger(__name__)
 
@@ -31,6 +38,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     engine = create_db_engine(settings.database_url)
     app.state.db_engine = engine
+    app.state.db_session_factory = create_session_factory(engine)
+    app.state.rate_limiter = InMemoryRateLimiter(
+        max_attempts=settings.auth_rate_limit_max_attempts,
+        window_seconds=settings.auth_rate_limit_window_seconds,
+    )
     logger.info("application_started", app_name=settings.app_name, environment=settings.environment)
 
     try:
@@ -63,6 +75,14 @@ def create_app() -> FastAPI:
         description="API orientada a eventos para el control inteligente de despensa.",
         lifespan=lifespan,
     )
+
+    app.add_middleware(SecurityHeadersMiddleware)
+    app.add_middleware(CorrelationIdMiddleware)
+    register_exception_handlers(app)
+    app.include_router(users_router)
+    app.include_router(pantry_router)
+    app.include_router(notifications_router)
+    app.include_router(recipes_router)
 
     @app.get("/", tags=["meta"])
     async def root() -> dict[str, str]:

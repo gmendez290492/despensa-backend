@@ -2,16 +2,16 @@ name: CI - Calidad, Seguridad y Tests
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   pull_request:
-    branches: [main]
+    branches: [main, develop]
 
 permissions:
   contents: read
 
 jobs:
-  quality-and-tests:
-    name: Lint, Tipado, SAST y Pytest
+  quality-and-unit-tests:
+    name: Lint, Tipado, SAST, Dependencias y Unit Tests
     runs-on: ubuntu-latest
 
     steps:
@@ -40,8 +40,64 @@ jobs:
       - name: Auditoría de vulnerabilidades en dependencias (pip-audit)
         run: uv run pip-audit
 
-      - name: Ejecutar pruebas unitarias (Pytest)
-        run: uv run pytest -v
+      - name: Ejecutar pruebas unitarias con cobertura
+        run: uv run pytest tests/unit -v --cov=app --cov-report=term-missing
+
+  integration-tests:
+    name: Migraciones Alembic y Tests de Integración
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: despensa
+          POSTGRES_PASSWORD: despensa_ci_pass
+          POSTGRES_DB: despensa_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U despensa -d despensa_test"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+
+      rabbitmq:
+        image: rabbitmq:3.13-alpine
+        env:
+          RABBITMQ_DEFAULT_USER: despensa
+          RABBITMQ_DEFAULT_PASS: despensa_ci_pass
+        ports:
+          - 5672:5672
+        options: >-
+          --health-cmd="rabbitmq-diagnostics -q ping"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+
+    env:
+      DATABASE_URL: postgresql+asyncpg://despensa:despensa_ci_pass@127.0.0.1:5432/despensa_test
+      RABBITMQ_URL: amqp://despensa:despensa_ci_pass@127.0.0.1:5672/
+      JWT_SECRET_KEY: ci-only-secret-key-for-integration-tests-32chars
+      ENVIRONMENT: local
+
+    steps:
+      - name: Descargar código
+        uses: actions/checkout@v4
+
+      - name: Instalar uv y Python 3.12
+        uses: astral-sh/setup-uv@v4
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependencias
+        run: uv sync
+
+      - name: Aplicar migraciones Alembic
+        run: uv run alembic upgrade head
+
+      - name: Ejecutar pruebas de integración
+        run: uv run pytest tests/integration -v
 
   secret-scan:
     name: Detección de Secretos (Gitleaks)

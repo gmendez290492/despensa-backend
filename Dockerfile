@@ -27,6 +27,8 @@ WORKDIR /app
 COPY pyproject.toml README.md ./
 RUN uv sync --no-install-project
 
+COPY alembic.ini ./
+COPY migrations ./migrations
 COPY src ./src
 COPY tests ./tests
 RUN uv sync
@@ -49,6 +51,8 @@ WORKDIR /app
 
 COPY --from=builder --chown=appuser:appgroup /app/.venv /app/.venv
 COPY --from=builder --chown=appuser:appgroup /app/src /app/src
+COPY --chown=appuser:appgroup alembic.ini ./
+COPY --chown=appuser:appgroup migrations ./migrations
 
 USER appuser
 EXPOSE 8000
