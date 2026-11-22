@@ -18,6 +18,7 @@ from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.modules.users.models import User
 
 
 class UnitOfMeasure(Base):
@@ -139,6 +140,7 @@ class PantryMember(Base):
     )
 
     pantry: Mapped[Pantry] = relationship(back_populates="members")
+    user: Mapped[User] = relationship()
 
 
 class Location(Base):

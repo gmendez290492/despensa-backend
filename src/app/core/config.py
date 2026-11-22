@@ -33,12 +33,13 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 15
     refresh_token_expire_days: int = 7
 
-    # Outbox Relay y Rate Limiting
+    # Outbox Relay, Scheduler y Rate Limiting
     outbox_poll_interval_seconds: float = 1.0
     outbox_batch_size: int = 50
     outbox_max_attempts: int = 5
     auth_rate_limit_max_attempts: int = 10
     auth_rate_limit_window_seconds: int = 60
+    expiration_scan_interval_seconds: float = 3600.0
 
     # Configuración de AWS / LocalStack / AWS Emulator
     aws_endpoint_url: str | None = None
