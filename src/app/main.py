@@ -24,6 +24,7 @@ from app.core.middleware import CorrelationIdMiddleware
 from app.core.security import InMemoryRateLimiter
 from app.modules.notifications.router import router as notifications_router
 from app.modules.pantry.router import router as pantry_router
+from app.modules.recipes.router import router as recipes_router
 from app.modules.users.router import router as users_router
 
 logger = structlog.get_logger(__name__)
@@ -80,6 +81,7 @@ def create_app() -> FastAPI:
     app.include_router(users_router)
     app.include_router(pantry_router)
     app.include_router(notifications_router)
+    app.include_router(recipes_router)
 
     @app.get("/", tags=["meta"])
     async def root() -> dict[str, str]:
