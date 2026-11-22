@@ -1,0 +1,48 @@
+variable "environment" {
+  description = "Ambiente de despliegue"
+  type        = string
+  default     = "dev"
+}
+
+variable "vpc_id" {
+  description = "ID de la VPC"
+  type        = string
+}
+
+variable "public_subnet_ids" {
+  description = "IDs de subredes publicas para ECS/ALB"
+  type        = list(string)
+}
+
+variable "ecs_security_group_id" {
+  description = "Security Group ID para las tareas ECS"
+  type        = string
+}
+
+variable "alb_security_group_id" {
+  description = "Security Group ID para el ALB"
+  type        = string
+}
+
+variable "database_url" {
+  description = "URL de conexión a PostgreSQL"
+  type        = string
+  sensitive   = true
+}
+
+variable "sns_topic_arn" {
+  description = "ARN del Topic SNS para publicación de eventos"
+  type        = string
+}
+
+variable "jwt_secret_key" {
+  description = "Clave secreta JWT (minimo 32 caracteres)"
+  type        = string
+  sensitive   = true
+}
+
+variable "app_image" {
+  description = "URI de la imagen Docker en ECR"
+  type        = string
+  default     = "despensa-backend:latest"
+}

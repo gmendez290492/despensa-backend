@@ -1,0 +1,61 @@
+name: CD - Despliegue Continuo a AWS (dev)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  id-token: write # Requerido para autenticación OIDC segura sin credenciales estáticas
+  contents: read
+
+jobs:
+  validate-terraform:
+    name: Validación de Infraestructura (Terraform)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar código
+        uses: actions/checkout@v4
+
+      - name: Instalar Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.8.5"
+
+      - name: Validar sintaxis de Terraform en dev
+        working-directory: infra/environments/dev
+        run: |
+          terraform init -backend=false
+          terraform validate
+
+      - name: Validar sintaxis de Terraform en localstack
+        working-directory: infra/environments/localstack
+        run: |
+          terraform init -backend=false
+          terraform validate
+
+  deploy-dev:
+    name: Build, ECR Push y Despliegue ECS Fargate
+    needs: [validate-terraform]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Descargar código
+        uses: actions/checkout@v4
+
+      - name: Configurar credenciales AWS vía OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+        continue-on-error: true # Permite pasar en pruebas si los secretos aún no están configurados en GitHub
+
+      - name: Autenticar en Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+        continue-on-error: true
+
+      - name: Construir y etiquetar imagen Docker
+        run: |
+          docker build --target prod -t despensa-backend:${{ github.sha }} -t despensa-backend:latest .
