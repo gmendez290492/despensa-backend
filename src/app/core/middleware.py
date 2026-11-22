@@ -33,3 +33,23 @@ class CorrelationIdMiddleware(BaseHTTPMiddleware):
             return response
         finally:
             structlog.contextvars.clear_contextvars()
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Inyecta cabeceras HTTP de seguridad recomendadas por OWASP para mitigar ataques web."""
+
+    async def dispatch(
+        self,
+        request: Request,
+        call_next: RequestResponseEndpoint,
+    ) -> Response:
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        if "Content-Security-Policy" not in response.headers:
+            response.headers["Content-Security-Policy"] = (
+                "default-src 'none'; frame-ancestors 'none'"
+            )
+        return response

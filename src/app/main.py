@@ -20,7 +20,7 @@ from app.core.health import (
     check_rabbitmq,
 )
 from app.core.logging import configure_logging
-from app.core.middleware import CorrelationIdMiddleware
+from app.core.middleware import CorrelationIdMiddleware, SecurityHeadersMiddleware
 from app.core.security import InMemoryRateLimiter
 from app.modules.notifications.router import router as notifications_router
 from app.modules.pantry.router import router as pantry_router
@@ -76,6 +76,7 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(CorrelationIdMiddleware)
     register_exception_handlers(app)
     app.include_router(users_router)
