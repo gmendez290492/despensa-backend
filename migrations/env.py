@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 # Importar modelos para que Base.metadata registre todas las tablas
 import app.modules.notifications.models  # noqa: F401
 import app.modules.pantry.models  # noqa: F401
+import app.modules.recipes.models  # noqa: F401
 import app.modules.users.models  # noqa: F401
 import app.shared.outbox  # noqa: F401
 from app.core.config import get_settings

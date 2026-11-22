@@ -1,0 +1,16 @@
+# Configuración para pruebas de carga y rendimiento con Locust
+# Ejecutar con: docker compose -f docker-compose.yml -f docker-compose.perf.yml up locust
+
+services:
+  locust:
+    image: locustio/locust:latest
+    ports:
+      - "8089:8089"
+    volumes:
+      - ./tests/performance:/mnt/locust
+    command: -f /mnt/locust/locustfile.py --host http://api:8000
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - despensa-net
