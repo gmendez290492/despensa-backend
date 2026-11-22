@@ -1,0 +1,15 @@
+# Escaneo dinamico de seguridad DAST con OWASP ZAP
+# Ejecutar con: docker compose -f docker-compose.yml -f docker-compose.security.yml run zap
+
+services:
+  zap:
+    image: zaproxy/zap-stable:latest
+    container_name: despensa-zap
+    command: zap-baseline.py -t http://api:8000/docs -r zap-report.html -I
+    depends_on:
+      api:
+        condition: service_healthy
+    volumes:
+      - ./docs:/zap/wrk
+    networks:
+      - despensa-net
