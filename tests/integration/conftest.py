@@ -9,6 +9,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
+import app.modules.pantry.models  # noqa: F401
 import app.modules.users.models  # noqa: F401
 import app.shared.outbox  # noqa: F401
 from app.core.config import Settings, get_settings
@@ -71,7 +72,29 @@ async def db_engine(test_settings: Settings) -> AsyncIterator[AsyncEngine]:
         await conn.run_sync(Base.metadata.create_all)
         await conn.execute(
             text(
-                "TRUNCATE TABLE refresh_tokens, users, outbox_events, processed_events CASCADE",
+                "TRUNCATE TABLE refresh_tokens, users, outbox_events, processed_events, "
+                "stock_movements, food_batches, locations, pantry_members, pantries, "
+                "products, categories, units_of_measure CASCADE",
+            ),
+        )
+        await conn.execute(
+            text(
+                "INSERT INTO units_of_measure "
+                "(code, name, dimension, base_conversion_factor) VALUES "
+                "('g', 'Gramos', 'MASS', 1.0), "
+                "('kg', 'Kilogramos', 'MASS', 1000.0), "
+                "('ml', 'Mililitros', 'VOLUME', 1.0), "
+                "('l', 'Litros', 'VOLUME', 1000.0), "
+                "('pza', 'Piezas', 'COUNT', 1.0) "
+                "ON CONFLICT (code) DO NOTHING;",
+            ),
+        )
+        await conn.execute(
+            text(
+                "INSERT INTO categories (id, name, icon, created_at) VALUES "
+                "('a0000000-0000-0000-0000-000000000001', 'Lácteos y Huevos', 'dairy', NOW()), "
+                "('a0000000-0000-0000-0000-000000000002', 'Proteínas y Carnes', 'meat', NOW()) "
+                "ON CONFLICT DO NOTHING;",
             ),
         )
 
