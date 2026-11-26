@@ -7,10 +7,11 @@ Backend orientado a eventos construido en **Python (FastAPI)**, **PostgreSQL**, 
 - **Etapa 0:** FastAPI (`/health/live`, `/health/ready`), `structlog`, Docker multi-stage (usuario no-root en `prod`), CI con Ruff, Mypy, Bandit, `pip-audit`, Gitleaks y Trivy.
 - **Etapa 1 (Módulo `users` + EDA):**
   - `POST /api/v1/auth/register` — registro con hashing **Argon2id**, validación de zona horaria IANA y evento `user.registered.v1` guardado en `outbox_events` en la misma transacción ACID.
-  - `POST /api/v1/auth/login` — emisión de Access Token (JWT corto) y Refresh Token con *rate limiting*.
-  - `POST /api/v1/auth/refresh` — rotación de Refresh Tokens con detección de reuso.
-  - `POST /api/v1/auth/logout` — revocación de Refresh Token.
-  - `GET /api/v1/users/me` — endpoint protegido con JWT Bearer.
+  - `POST /api/v1/auth/login` — abre una **sesión** y emite Access Token (JWT corto con claim `sid`) y Refresh Token, con *rate limiting* por IP y por email.
+  - `POST /api/v1/auth/refresh` — rotación de Refresh Tokens con detección de reuso (revoca la sesión afectada) y ventana de gracia opcional.
+  - `POST /api/v1/auth/logout` — revoca la sesión: el Refresh **y los Access Tokens** de esa sesión dejan de ser válidos.
+  - `POST /api/v1/auth/password/forgot` y `POST /api/v1/auth/password/reset` — recuperación de contraseña por correo (token de un solo uso, 30 min).
+  - `GET /api/v1/users/me` — endpoint protegido con JWT Bearer (valida que la sesión siga activa).
   - **Worker (`src/app/worker.py`):** lee el Outbox (`FOR UPDATE SKIP LOCKED`), publica en RabbitMQ (`despensa.events` + DLQ) y procesa de forma idempotente el correo de bienvenida en **Mailpit**.
   - **Migraciones (`alembic`):** servicio `migrate` ejecuta `alembic upgrade head` antes de iniciar API y Worker.
 
@@ -34,6 +35,26 @@ docker compose exec -T api mypy src
 docker compose exec -T api bandit -c pyproject.toml -r src
 docker compose exec -T api pip-audit
 docker compose exec -T api pytest -v
+```
+
+## Seguridad de autenticación (issue #9)
+
+| Tema | Comportamiento |
+| --- | --- |
+| Logout | Revoca la sesión (`auth_sessions`). Cualquier access token con ese `sid` recibe `401 invalid-token` de inmediato. |
+| Reuso de refresh | Un refresh ya rotado revoca **solo su sesión** (las demás sesiones del usuario siguen activas). |
+| Ventana de gracia | Si el login envió `X-Client-Binding`, ese valor se exige en cada refresh y, durante `REFRESH_REUSE_GRACE_SECONDS` (10 s), el refresh anterior devuelve **el mismo par sucesor** en lugar de revocar. Sin binding no hay gracia. |
+| Registro duplicado | Se mantiene `409 email-already-exists` (riesgo aceptado de enumeración), mitigado con límite estricto por IP (`REGISTER_RATE_LIMIT_*`) y por email (`AUTH_EMAIL_RATE_LIMIT_*`). |
+| Login | Tiempo de respuesta igualado para correos inexistentes (verificación Argon2 contra un hash de referencia). |
+| Rate limiting | Backend `postgres` (tabla `rate_limit_buckets`), compartido entre réplicas y persistente entre deploys. Los `429` incluyen `Retry-After`. Las claves por email se guardan como SHA-256. |
+| IP del cliente | Uvicorn usa `X-Forwarded-For` solo si el emisor está en `FORWARDED_ALLOW_IPS`. En AWS es el CIDR de la VPC (el SG de ECS solo admite tráfico del ALB). **Nunca** usar `*` fuera de local. |
+| Recuperación | `forgot` responde `202` siempre. El worker genera el token (no viaja por Outbox ni broker), guarda solo su hash y envía el enlace `${FRONTEND_BASE_URL}/reset-password?token=...`. El reset revoca todas las sesiones. |
+
+**E2E del frontend:** la suite supera los límites por defecto. Relájalos solo en ese entorno, por ejemplo:
+
+```powershell
+$env:AUTH_RATE_LIMIT_MAX_ATTEMPTS=1000; $env:REGISTER_RATE_LIMIT_MAX_ATTEMPTS=1000; $env:AUTH_EMAIL_RATE_LIMIT_MAX_ATTEMPTS=1000
+docker compose up -d api
 ```
 
 ## URLs útiles en local

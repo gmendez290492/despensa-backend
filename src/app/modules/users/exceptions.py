@@ -35,3 +35,11 @@ class UserNotFoundError(DomainError):
     status_code = status.HTTP_404_NOT_FOUND
     error_type = "user-not-found"
     title = "User Not Found"
+
+
+class InvalidPasswordResetTokenError(DomainError):
+    """Token de recuperación de contraseña inválido, expirado o ya utilizado."""
+
+    status_code = status.HTTP_400_BAD_REQUEST
+    error_type = "invalid-reset-token"
+    title = "Invalid or Expired Reset Token"

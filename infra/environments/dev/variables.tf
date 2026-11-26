@@ -27,3 +27,9 @@ variable "budget_notification_email" {
   type        = string
   default     = "alertas@despensa.local"
 }
+
+variable "frontend_base_url" {
+  description = "URL pública del frontend (enlaces de recuperación de contraseña)"
+  type        = string
+  default     = "http://localhost:3000"
+}

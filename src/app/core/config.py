@@ -33,13 +33,32 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 15
     refresh_token_expire_days: int = 7
 
-    # Outbox Relay, Scheduler y Rate Limiting
+    # Ventana de gracia del refresh: el refresh anterior devuelve el mismo par sucesor
+    # durante N segundos, solo si la sesión tiene X-Client-Binding y coincide (0 = desactivada).
+    refresh_reuse_grace_seconds: int = 10
+
+    # Recuperación de contraseña
+    password_reset_token_expire_minutes: int = 30
+    frontend_base_url: str = "http://localhost:3000"
+
+    # Outbox Relay y Scheduler
     outbox_poll_interval_seconds: float = 1.0
     outbox_batch_size: int = 50
     outbox_max_attempts: int = 5
+    expiration_scan_interval_seconds: float = 3600.0
+
+    # Rate Limiting. "postgres" comparte contadores entre réplicas y sobrevive a deploys;
+    # "memory" es por proceso y solo apto para pruebas o una única instancia.
+    rate_limit_backend: Literal["memory", "postgres"] = "postgres"
+    # Por IP en login, forgot-password y reset-password (ventana corta)
     auth_rate_limit_max_attempts: int = 10
     auth_rate_limit_window_seconds: int = 60
-    expiration_scan_interval_seconds: float = 3600.0
+    # Por IP en registro (más estricto para frenar la enumeración vía 409)
+    register_rate_limit_max_attempts: int = 5
+    register_rate_limit_window_seconds: int = 3600
+    # Por email (hash SHA-256) en login, registro y forgot-password
+    auth_email_rate_limit_max_attempts: int = 10
+    auth_email_rate_limit_window_seconds: int = 900
 
     # Configuración de AWS / LocalStack / AWS Emulator
     aws_endpoint_url: str | None = None
