@@ -56,6 +56,8 @@ module "compute" {
   database_url          = module.database.database_url
   sns_topic_arn         = module.messaging.sns_topic_arn
   jwt_secret_key        = var.jwt_secret_key
+  trusted_proxy_cidr    = module.network.vpc_cidr
+  frontend_base_url     = var.frontend_base_url
 }
 
 # 5. Control de Costos: Alerta de AWS Budgets a $5 USD

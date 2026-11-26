@@ -24,3 +24,11 @@ class UserRegisteredPayload(BaseModel):
     email: str
     full_name: str
     timezone: str
+
+
+class PasswordResetRequestedPayload(BaseModel):
+    """Payload del evento user.password_reset_requested.v1 (sin el token: lo genera el worker)."""
+
+    user_id: UUID
+    email: str
+    full_name: str

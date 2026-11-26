@@ -90,6 +90,17 @@ services:
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-mock_key}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-mock_secret}
       S3_BUCKET_NAME: ${S3_BUCKET_NAME:-despensa-media-local}
+      # Auth (issue #9): rate limit compartido, proxy confiable y recuperación de contraseña
+      RATE_LIMIT_BACKEND: ${RATE_LIMIT_BACKEND:-postgres}
+      AUTH_RATE_LIMIT_MAX_ATTEMPTS: ${AUTH_RATE_LIMIT_MAX_ATTEMPTS:-10}
+      AUTH_RATE_LIMIT_WINDOW_SECONDS: ${AUTH_RATE_LIMIT_WINDOW_SECONDS:-60}
+      REGISTER_RATE_LIMIT_MAX_ATTEMPTS: ${REGISTER_RATE_LIMIT_MAX_ATTEMPTS:-5}
+      REGISTER_RATE_LIMIT_WINDOW_SECONDS: ${REGISTER_RATE_LIMIT_WINDOW_SECONDS:-3600}
+      AUTH_EMAIL_RATE_LIMIT_MAX_ATTEMPTS: ${AUTH_EMAIL_RATE_LIMIT_MAX_ATTEMPTS:-10}
+      AUTH_EMAIL_RATE_LIMIT_WINDOW_SECONDS: ${AUTH_EMAIL_RATE_LIMIT_WINDOW_SECONDS:-900}
+      REFRESH_REUSE_GRACE_SECONDS: ${REFRESH_REUSE_GRACE_SECONDS:-10}
+      # Local: confía en los rangos privados (gateway de Docker/Rancher). Nunca usar "*" fuera de local.
+      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}
       PYTHONPATH: /app/src
     ports:
       - "8000:8000"
@@ -131,6 +142,8 @@ services:
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-mock_key}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-mock_secret}
       S3_BUCKET_NAME: ${S3_BUCKET_NAME:-despensa-media-local}
+      FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-http://localhost:3000}
+      PASSWORD_RESET_TOKEN_EXPIRE_MINUTES: ${PASSWORD_RESET_TOKEN_EXPIRE_MINUTES:-30}
       PYTHONPATH: /app/src
     volumes:
       - ./src:/app/src

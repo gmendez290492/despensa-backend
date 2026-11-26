@@ -2,6 +2,7 @@
 
 import asyncio
 import signal
+from collections.abc import Awaitable, Callable
 
 import aio_pika
 import structlog
@@ -11,7 +12,9 @@ from app.core.config import Settings, get_settings
 from app.core.database import create_db_engine, create_session_factory
 from app.core.logging import configure_logging
 from app.modules.notifications.handlers import WelcomeEmailHandler
+from app.modules.users.handlers import PasswordResetEmailHandler
 from app.shared.adapters.rabbitmq import (
+    PASSWORD_RESET_QUEUE,
     WELCOME_EMAIL_QUEUE,
     RabbitMQEventPublisher,
     setup_rabbitmq_topology,
@@ -87,6 +90,28 @@ async def process_welcome_message(
             raise
 
 
+async def process_password_reset_message(
+    *,
+    raw_body: bytes,
+    session_factory: async_sessionmaker[AsyncSession],
+    email_sender: EmailSender,
+    settings: Settings,
+) -> bool:
+    """Parsea un EventEnvelope y ejecuta el handler idempotente de recuperación."""
+    event = EventEnvelope.model_validate_json(raw_body)
+    async with session_factory() as session:
+        try:
+            handler = PasswordResetEmailHandler(
+                session=session,
+                email_sender=email_sender,
+                settings=settings,
+            )
+            return await handler.handle(event)
+        except Exception:
+            await session.rollback()
+            raise
+
+
 async def _outbox_relay_loop(
     *,
     stop_event: asyncio.Event,
@@ -116,34 +141,31 @@ async def _outbox_relay_loop(
             continue
 
 
-async def _welcome_consumer_loop(
+async def _consumer_loop(
     *,
     stop_event: asyncio.Event,
-    session_factory: async_sessionmaker[AsyncSession],
-    email_sender: EmailSender,
     rabbitmq_url: str,
+    queue_name: str,
+    process: Callable[[bytes], Awaitable[bool]],
 ) -> None:
     connection = await aio_pika.connect_robust(rabbitmq_url)
     async with connection:
         channel = await connection.channel()
         await channel.set_qos(prefetch_count=10)
         await setup_rabbitmq_topology(channel)
-        queue = await channel.get_queue(WELCOME_EMAIL_QUEUE)
+        queue = await channel.get_queue(queue_name)
 
         async with queue.iterator() as queue_iter:
             async for message in queue_iter:
                 if stop_event.is_set():
                     break
                 try:
-                    await process_welcome_message(
-                        raw_body=message.body,
-                        session_factory=session_factory,
-                        email_sender=email_sender,
-                    )
+                    await process(message.body)
                     await message.ack()
                 except Exception as exc:
                     logger.error(
-                        "welcome_consumer_message_failed",
+                        "consumer_message_failed",
+                        queue=queue_name,
                         message_id=message.message_id,
                         error=str(exc),
                     )
@@ -183,11 +205,26 @@ async def run_worker() -> None:
                 publisher=publisher,
                 settings=settings,
             ),
-            _welcome_consumer_loop(
+            _consumer_loop(
                 stop_event=stop_event,
-                session_factory=session_factory,
-                email_sender=email_sender,
                 rabbitmq_url=settings.rabbitmq_url,
+                queue_name=WELCOME_EMAIL_QUEUE,
+                process=lambda body: process_welcome_message(
+                    raw_body=body,
+                    session_factory=session_factory,
+                    email_sender=email_sender,
+                ),
+            ),
+            _consumer_loop(
+                stop_event=stop_event,
+                rabbitmq_url=settings.rabbitmq_url,
+                queue_name=PASSWORD_RESET_QUEUE,
+                process=lambda body: process_password_reset_message(
+                    raw_body=body,
+                    session_factory=session_factory,
+                    email_sender=email_sender,
+                    settings=settings,
+                ),
             ),
         )
     finally:

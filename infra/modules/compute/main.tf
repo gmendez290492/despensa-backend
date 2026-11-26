@@ -160,7 +160,10 @@ resource "aws_ecs_task_definition" "api" {
         { name = "DATABASE_URL", value = var.database_url },
         { name = "JWT_SECRET_KEY", value = var.jwt_secret_key },
         { name = "AWS_DEFAULT_REGION", value = "us-east-1" },
-        { name = "SNS_TOPIC_ARN", value = var.sns_topic_arn }
+        { name = "SNS_TOPIC_ARN", value = var.sns_topic_arn },
+        { name = "RATE_LIMIT_BACKEND", value = "postgres" },
+        { name = "FORWARDED_ALLOW_IPS", value = var.trusted_proxy_cidr },
+        { name = "FRONTEND_BASE_URL", value = var.frontend_base_url }
       ]
       logConfiguration = {
         logDriver = "awslogs"

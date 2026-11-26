@@ -13,6 +13,7 @@ class DomainError(Exception):
 
     def __init__(self, detail: str) -> None:
         self.detail = detail
+        self.headers: dict[str, str] = {}
         super().__init__(detail)
 
 
@@ -22,6 +23,11 @@ class RateLimitExceededError(DomainError):
     status_code = status.HTTP_429_TOO_MANY_REQUESTS
     error_type = "rate-limit-exceeded"
     title = "Too Many Requests"
+
+    def __init__(self, detail: str, *, retry_after_seconds: int | None = None) -> None:
+        super().__init__(detail)
+        if retry_after_seconds is not None:
+            self.headers["Retry-After"] = str(max(1, retry_after_seconds))
 
 
 def register_exception_handlers(app: FastAPI) -> None:
@@ -33,6 +39,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         return JSONResponse(
             status_code=exc.status_code,
             media_type="application/problem+json",
+            headers=exc.headers or None,
             content={
                 "type": f"https://despensa.api/errors/{exc.error_type}",
                 "title": exc.title,

@@ -111,7 +111,7 @@ No creamos tablas a mano con pgAdmin porque luego en GitHub Actions o en AWS las
    - **Access Token:** credencial corta que envías en `Authorization: Bearer <token>`. La API la valida con la firma `JWT_SECRET_KEY` sin tener que consultar la tabla `refresh_tokens` en cada petición.
    - **Refresh Token:** sirve **solo** para pedir un par nuevo en `POST /api/v1/auth/refresh` (si intentas usarlo en `GET /users/me`, `decode_token(..., expected_type="access")` lo rechaza).
    - **Rotación y detección de robo:** cada Refresh Token tiene un `jti` guardado en `refresh_tokens`. Al usarlo, se revoca y se emite uno nuevo. Si alguien intenta reutilizar un Refresh Token ya revocado, el sistema revoca **todos** los tokens de ese usuario por seguridad.
-3. **Rate Limiting:** `InMemoryRateLimiter` limita intentos repetidos por IP en `/auth/login` y `/auth/register` devolviendo HTTP `429`.
+3. **Rate Limiting:** `PostgresRateLimiter` (`app/core/rate_limit.py`, tabla `rate_limit_buckets`) limita intentos por IP y por email en `/auth/login`, `/auth/register` y `/auth/password/*`, compartiendo contadores entre réplicas y devolviendo HTTP `429` con `Retry-After`. `InMemoryRateLimiter` queda solo para pruebas (`RATE_LIMIT_BACKEND=memory`).
 
 ---
 

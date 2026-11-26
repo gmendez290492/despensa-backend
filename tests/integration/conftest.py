@@ -9,6 +9,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
+import app.core.rate_limit  # noqa: F401
 import app.modules.notifications.models  # noqa: F401
 import app.modules.pantry.models  # noqa: F401
 import app.modules.recipes.models  # noqa: F401
@@ -16,7 +17,7 @@ import app.modules.users.models  # noqa: F401
 import app.shared.outbox  # noqa: F401
 from app.core.config import Settings, get_settings
 from app.core.database import Base, create_db_engine, create_session_factory
-from app.core.security import InMemoryRateLimiter
+from app.core.rate_limit import PostgresRateLimiter
 from app.main import create_app
 
 
@@ -36,6 +37,10 @@ def _build_test_settings() -> Settings:
             "jwt_secret_key": secret,
             "auth_rate_limit_max_attempts": 5,
             "auth_rate_limit_window_seconds": 60,
+            "register_rate_limit_max_attempts": 20,
+            "register_rate_limit_window_seconds": 3600,
+            "auth_email_rate_limit_max_attempts": 20,
+            "auth_email_rate_limit_window_seconds": 900,
         },
     )
 
@@ -74,7 +79,8 @@ async def db_engine(test_settings: Settings) -> AsyncIterator[AsyncEngine]:
         await conn.run_sync(Base.metadata.create_all)
         await conn.execute(
             text(
-                "TRUNCATE TABLE refresh_tokens, users, outbox_events, processed_events, "
+                "TRUNCATE TABLE rate_limit_buckets, password_reset_tokens, refresh_tokens, "
+                "auth_sessions, users, outbox_events, processed_events, "
                 "notifications, recipe_ingredients, recipes, stock_movements, food_batches, "
                 "locations, pantry_members, pantries, products, categories, "
                 "units_of_measure CASCADE",
@@ -124,10 +130,8 @@ def test_app(
     app.dependency_overrides[get_settings] = lambda: test_settings
     app.state.db_engine = db_engine
     app.state.db_session_factory = db_session_factory
-    app.state.rate_limiter = InMemoryRateLimiter(
-        max_attempts=test_settings.auth_rate_limit_max_attempts,
-        window_seconds=test_settings.auth_rate_limit_window_seconds,
-    )
+    # Las pruebas de integración usan el backend real (PostgreSQL) del rate limiter.
+    app.state.rate_limiter = PostgresRateLimiter(db_session_factory)
     return app
 
 

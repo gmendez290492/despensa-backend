@@ -9,6 +9,7 @@ EVENTS_EXCHANGE = "despensa.events"
 DLX_EXCHANGE = "despensa.events.dlx"
 WELCOME_EMAIL_QUEUE = "notifications.user_registered"
 WELCOME_EMAIL_DLQ = "notifications.user_registered.dlq"
+PASSWORD_RESET_QUEUE = "users.password_reset_requested"  # noqa: S105  # nosec B105
 
 
 async def setup_rabbitmq_topology(channel: AbstractChannel) -> AbstractExchange:
@@ -33,6 +34,14 @@ async def setup_rabbitmq_topology(channel: AbstractChannel) -> AbstractExchange:
         arguments={"x-dead-letter-exchange": DLX_EXCHANGE},
     )
     await queue.bind(events_exchange, routing_key="user.registered.#")
+
+    # Los mensajes rechazados terminan en la DLQ compartida (ligada con "#" al DLX).
+    reset_queue = await channel.declare_queue(
+        PASSWORD_RESET_QUEUE,
+        durable=True,
+        arguments={"x-dead-letter-exchange": DLX_EXCHANGE},
+    )
+    await reset_queue.bind(events_exchange, routing_key="user.password_reset_requested.#")
 
     return events_exchange
 

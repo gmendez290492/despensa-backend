@@ -88,3 +88,32 @@ class TokenResponse(BaseModel):
     refresh_token: str
     token_type: Literal["bearer"] = "bearer"  # noqa: S105
     expires_in: int
+
+
+class PasswordForgotRequest(BaseModel):
+    """Solicitud de correo para restablecer la contraseña."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    email: EmailStr
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: EmailStr) -> str:
+        """Normaliza el correo electrónico en minúsculas."""
+        return str(value).strip().lower()
+
+
+class PasswordResetRequest(BaseModel):
+    """Token recibido por correo y nueva contraseña."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    token: str = Field(min_length=20, max_length=256)
+    new_password: str = Field(min_length=8, max_length=128)
+
+
+class MessageResponse(BaseModel):
+    """Respuesta genérica con un mensaje legible."""
+
+    detail: str

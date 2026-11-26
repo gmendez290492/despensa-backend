@@ -116,6 +116,7 @@ resource "aws_sns_topic_subscription" "notifications_subscription" {
   filter_policy = jsonencode({
     event_type = [
       "user.registered.v1",
+      "user.password_reset_requested.v1",
       "pantry.item_expiring_soon.v1",
       "notification.expiration_alert.v1"
     ]

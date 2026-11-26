@@ -21,7 +21,7 @@ from app.core.health import (
 )
 from app.core.logging import configure_logging
 from app.core.middleware import CorrelationIdMiddleware, SecurityHeadersMiddleware
-from app.core.security import InMemoryRateLimiter
+from app.core.rate_limit import InMemoryRateLimiter, PostgresRateLimiter, RateLimiter
 from app.modules.notifications.router import router as notifications_router
 from app.modules.pantry.router import router as pantry_router
 from app.modules.recipes.router import router as recipes_router
@@ -38,12 +38,27 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     engine = create_db_engine(settings.database_url)
     app.state.db_engine = engine
-    app.state.db_session_factory = create_session_factory(engine)
-    app.state.rate_limiter = InMemoryRateLimiter(
-        max_attempts=settings.auth_rate_limit_max_attempts,
-        window_seconds=settings.auth_rate_limit_window_seconds,
+    session_factory = create_session_factory(engine)
+    app.state.db_session_factory = session_factory
+    rate_limiter: RateLimiter = (
+        PostgresRateLimiter(
+            session_factory,
+            max_window_seconds=max(
+                settings.auth_rate_limit_window_seconds,
+                settings.register_rate_limit_window_seconds,
+                settings.auth_email_rate_limit_window_seconds,
+            ),
+        )
+        if settings.rate_limit_backend == "postgres"
+        else InMemoryRateLimiter()
     )
-    logger.info("application_started", app_name=settings.app_name, environment=settings.environment)
+    app.state.rate_limiter = rate_limiter
+    logger.info(
+        "application_started",
+        app_name=settings.app_name,
+        environment=settings.environment,
+        rate_limit_backend=settings.rate_limit_backend,
+    )
 
     try:
         yield

@@ -46,3 +46,13 @@ variable "app_image" {
   type        = string
   default     = "despensa-backend:latest"
 }
+
+variable "trusted_proxy_cidr" {
+  description = "CIDR confiable para X-Forwarded-For (VPC: el SG de ECS solo admite tráfico del ALB)"
+  type        = string
+}
+
+variable "frontend_base_url" {
+  description = "URL pública del frontend, usada en los enlaces de recuperación de contraseña"
+  type        = string
+}
