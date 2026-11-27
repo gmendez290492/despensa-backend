@@ -35,6 +35,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.core.config import Settings, settings_dependency
 from app.core.database import Base, get_db_session
 from app.core.exceptions import DomainError, RateLimitExceededError, problem_details
+from app.core.openapi import problem_responses
 
 logger = structlog.get_logger(__name__)
 
@@ -405,28 +406,6 @@ _ERROR_NOTES: dict[type[DomainError], str] = {
     IdempotencyKeyReusedError: "la clave ya se usó con otra petición (método, ruta o cuerpo)",
 }
 
-_PROBLEM_PROPERTIES: dict[str, Any] = {
-    "type": {"type": "string", "format": "uri"},
-    "title": {"type": "string"},
-    "status": {"type": "integer"},
-    "detail": {"type": "string"},
-    "instance": {"type": "string"},
-    "correlation_id": {"type": ["string", "null"]},
-}
-
-
-def _problem_content(errors: list[type[DomainError]]) -> dict[str, Any]:
-    types = [f"https://despensa.api/errors/{e.error_type}" for e in errors]
-    return {
-        "application/problem+json": {
-            "schema": {
-                "type": "object",
-                "description": "RFC 7807 (problem+json).",
-                "properties": {**_PROBLEM_PROPERTIES, "type": {"type": "string", "enum": types}},
-            },
-        },
-    }
-
 
 def idempotency_responses(*business_errors: type[DomainError]) -> dict[int | str, dict[str, Any]]:
     """Respuestas de error de una mutación con Idempotency-Key, para OpenAPI.
@@ -434,28 +413,7 @@ def idempotency_responses(*business_errors: type[DomainError]) -> dict[int | str
     Recibe las excepciones de negocio que puede lanzar el endpoint y las agrupa por status
     junto a las del mecanismo de idempotencia, de modo que cada `type` posible queda
     documentado en el status que le corresponde (p. ej. el 409 de `/pantries/join` lista
-    `already-pantry-member` e `idempotency-request-in-progress`).
+    `already-pantry-member` e `idempotency-request-in-progress`). El 422 de validación y el
+    401 los añade `install_openapi` a todas las operaciones.
     """
-    by_status: dict[int, list[type[DomainError]]] = {}
-    for error in (*business_errors, *_IDEMPOTENCY_ERRORS):
-        group = by_status.setdefault(error.status_code, [])
-        if error not in group:
-            group.append(error)
-
-    responses: dict[int | str, dict[str, Any]] = {}
-    for code in sorted(by_status):
-        errors = by_status[code]
-        lines = [f"- `{e.error_type}`: {_ERROR_NOTES.get(e, e.title)}" for e in errors]
-        content = _problem_content(errors)
-        description = "\n".join(lines)
-        if code == status.HTTP_422_UNPROCESSABLE_CONTENT:
-            # Conserva el 422 de validación de FastAPI (application/json) junto al problem+json.
-            content = {
-                "application/json": {
-                    "schema": {"$ref": "#/components/schemas/HTTPValidationError"}
-                },
-                **content,
-            }
-            description = "- Cuerpo inválido (validación, `application/json`)\n" + description
-        responses[code] = {"description": description, "content": content}
-    return responses
+    return problem_responses(*business_errors, *_IDEMPOTENCY_ERRORS, notes=_ERROR_NOTES)
