@@ -101,6 +101,9 @@ services:
       AUTH_EMAIL_RATE_LIMIT_MAX_ATTEMPTS: ${AUTH_EMAIL_RATE_LIMIT_MAX_ATTEMPTS:-10}
       AUTH_EMAIL_RATE_LIMIT_WINDOW_SECONDS: ${AUTH_EMAIL_RATE_LIMIT_WINDOW_SECONDS:-900}
       REFRESH_REUSE_GRACE_SECONDS: ${REFRESH_REUSE_GRACE_SECONDS:-10}
+      # Idempotency-Key (issue #11): TTL de 7 días para cubrir la outbox offline del frontend
+      IDEMPOTENCY_KEY_TTL_HOURS: ${IDEMPOTENCY_KEY_TTL_HOURS:-168}
+      IDEMPOTENCY_LOCK_TIMEOUT_MS: ${IDEMPOTENCY_LOCK_TIMEOUT_MS:-5000}
       # Local: confía en los rangos privados (gateway de Docker/Rancher). Nunca usar "*" fuera de local.
       FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}
       PYTHONPATH: /app/src

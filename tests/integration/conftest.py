@@ -9,6 +9,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
+import app.core.idempotency  # noqa: F401
 import app.core.rate_limit  # noqa: F401
 import app.modules.notifications.models  # noqa: F401
 import app.modules.pantry.models  # noqa: F401
@@ -81,8 +82,8 @@ async def db_engine(test_settings: Settings) -> AsyncIterator[AsyncEngine]:
         await conn.run_sync(Base.metadata.create_all)
         await conn.execute(
             text(
-                "TRUNCATE TABLE rate_limit_buckets, password_reset_tokens, refresh_tokens, "
-                "auth_sessions, users, outbox_events, processed_events, "
+                "TRUNCATE TABLE idempotency_keys, rate_limit_buckets, password_reset_tokens, "
+                "refresh_tokens, auth_sessions, users, outbox_events, processed_events, "
                 "notifications, recipe_ingredients, recipes, stock_movements, food_batches, "
                 "locations, pantry_members, pantries, products, categories, "
                 "units_of_measure CASCADE",

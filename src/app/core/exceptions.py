@@ -30,22 +30,26 @@ class RateLimitExceededError(DomainError):
             self.headers["Retry-After"] = str(max(1, retry_after_seconds))
 
 
+def problem_details(request: Request, exc: DomainError) -> dict[str, object]:
+    """Cuerpo RFC 7807 de un error de dominio (también se guarda para repetirlo)."""
+    return {
+        "type": f"https://despensa.api/errors/{exc.error_type}",
+        "title": exc.title,
+        "status": exc.status_code,
+        "detail": exc.detail,
+        "instance": str(request.url.path),
+        "correlation_id": getattr(request.state, "correlation_id", None),
+    }
+
+
 def register_exception_handlers(app: FastAPI) -> None:
     """Traduce excepciones de dominio a respuestas RFC 7807 (application/problem+json)."""
 
     @app.exception_handler(DomainError)
     async def domain_error_handler(request: Request, exc: DomainError) -> JSONResponse:
-        correlation_id = getattr(request.state, "correlation_id", None)
         return JSONResponse(
             status_code=exc.status_code,
             media_type="application/problem+json",
             headers=exc.headers or None,
-            content={
-                "type": f"https://despensa.api/errors/{exc.error_type}",
-                "title": exc.title,
-                "status": exc.status_code,
-                "detail": exc.detail,
-                "instance": str(request.url.path),
-                "correlation_id": correlation_id,
-            },
+            content=problem_details(request, exc),
         )
