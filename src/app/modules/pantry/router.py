@@ -6,8 +6,17 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query, Request, status
 from fastapi.responses import JSONResponse
 
-from app.core.idempotency import IDEMPOTENCY_RESPONSES, IdempotencyDep
+from app.core.idempotency import IdempotencyDep, idempotency_responses
 from app.modules.pantry.dependencies import PantryServiceDep
+from app.modules.pantry.exceptions import (
+    AlreadyPantryMemberError,
+    InsufficientStockError,
+    InvalidInviteCodeError,
+    LocationNotFoundError,
+    PantryAccessDeniedError,
+    ProductNotFoundError,
+    UnitNotFoundError,
+)
 from app.modules.pantry.schemas import (
     CategoryResponse,
     ConsumeRequest,
@@ -38,7 +47,7 @@ CurrentUserDep = Annotated[User, Depends(get_current_user)]
     response_model=PantryResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Crear una nueva despensa",
-    responses=IDEMPOTENCY_RESPONSES,
+    responses=idempotency_responses(),
 )
 async def create_pantry(
     request: Request,
@@ -85,7 +94,7 @@ async def list_pantries(
     "/pantries/join",
     response_model=PantryResponse,
     summary="Unirse a una despensa mediante código de invitación",
-    responses=IDEMPOTENCY_RESPONSES,
+    responses=idempotency_responses(InvalidInviteCodeError, AlreadyPantryMemberError),
 )
 async def join_pantry(
     request: Request,
@@ -122,7 +131,7 @@ async def join_pantry(
     response_model=LocationResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Crear zona de almacenamiento en la despensa",
-    responses=IDEMPOTENCY_RESPONSES,
+    responses=idempotency_responses(PantryAccessDeniedError),
 )
 async def create_location(
     pantry_id: UUID,
@@ -186,7 +195,7 @@ async def list_categories(
     response_model=ProductResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Crear producto en el catálogo maestro",
-    responses=IDEMPOTENCY_RESPONSES,
+    responses=idempotency_responses(UnitNotFoundError, ProductNotFoundError),
 )
 async def create_product(
     payload: ProductCreateRequest,
@@ -232,7 +241,12 @@ async def list_products(
     response_model=FoodBatchResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Registrar compra de lote de alimento",
-    responses=IDEMPOTENCY_RESPONSES,
+    responses=idempotency_responses(
+        PantryAccessDeniedError,
+        LocationNotFoundError,
+        ProductNotFoundError,
+        UnitNotFoundError,
+    ),
 )
 async def add_food_batch(
     request: Request,
@@ -276,7 +290,7 @@ async def list_batches(
     "/pantries/{pantry_id}/consume",
     response_model=ConsumeResultResponse,
     summary="Consumir alimento aplicando algoritmo FEFO inteligente",
-    responses=IDEMPOTENCY_RESPONSES,
+    responses=idempotency_responses(PantryAccessDeniedError, InsufficientStockError),
 )
 async def consume_product(
     request: Request,

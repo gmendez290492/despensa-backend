@@ -390,48 +390,72 @@ async def get_idempotency_guard(
 IdempotencyDep = Annotated[IdempotencyGuard, Depends(get_idempotency_guard)]
 
 
-def _problem(error_types: str) -> dict[str, Any]:
+_IDEMPOTENCY_ERRORS: tuple[type[DomainError], ...] = (
+    InvalidIdempotencyKeyError,
+    IdempotencyRequestInProgressError,
+    IdempotencyKeyReusedError,
+)
+
+_ERROR_NOTES: dict[type[DomainError], str] = {
+    InvalidIdempotencyKeyError: "formato de `Idempotency-Key` inválido",
+    IdempotencyRequestInProgressError: (
+        "otra petición con la misma clave sigue en curso; incluye `Retry-After`, es "
+        "transitorio y se reintenta con la misma clave"
+    ),
+    IdempotencyKeyReusedError: "la clave ya se usó con otra petición (método, ruta o cuerpo)",
+}
+
+_PROBLEM_PROPERTIES: dict[str, Any] = {
+    "type": {"type": "string", "format": "uri"},
+    "title": {"type": "string"},
+    "status": {"type": "integer"},
+    "detail": {"type": "string"},
+    "instance": {"type": "string"},
+    "correlation_id": {"type": ["string", "null"]},
+}
+
+
+def _problem_content(errors: list[type[DomainError]]) -> dict[str, Any]:
+    types = [f"https://despensa.api/errors/{e.error_type}" for e in errors]
     return {
         "application/problem+json": {
             "schema": {
                 "type": "object",
-                "description": f"RFC 7807. `type` termina en: {error_types}.",
-                "properties": {
-                    "type": {"type": "string", "format": "uri"},
-                    "title": {"type": "string"},
-                    "status": {"type": "integer"},
-                    "detail": {"type": "string"},
-                    "instance": {"type": "string"},
-                    "correlation_id": {"type": ["string", "null"]},
-                },
+                "description": "RFC 7807 (problem+json).",
+                "properties": {**_PROBLEM_PROPERTIES, "type": {"type": "string", "enum": types}},
             },
         },
     }
 
 
-# Respuestas de error que añade Idempotency-Key, para documentarlas en OpenAPI.
-IDEMPOTENCY_RESPONSES: dict[int | str, dict[str, Any]] = {
-    status.HTTP_400_BAD_REQUEST: {
-        "description": "Error de negocio o `invalid-idempotency-key` (formato de la clave).",
-        "content": _problem("`invalid-idempotency-key` o el error de negocio del endpoint"),
-    },
-    status.HTTP_409_CONFLICT: {
-        "description": (
-            "`idempotency-request-in-progress`: otra petición con la misma clave sigue en "
-            "curso. Incluye `Retry-After`; es transitorio y se debe reintentar con la misma clave."
-        ),
-        "content": _problem("`idempotency-request-in-progress`"),
-    },
-    status.HTTP_422_UNPROCESSABLE_CONTENT: {
-        "description": (
-            "Cuerpo inválido (application/json) o `idempotency-key-reused`: la clave ya se usó "
-            "con otra petición (application/problem+json)."
-        ),
-        "content": {
-            "application/json": {
-                "schema": {"$ref": "#/components/schemas/HTTPValidationError"},
-            },
-            **_problem("`idempotency-key-reused`"),
-        },
-    },
-}
+def idempotency_responses(*business_errors: type[DomainError]) -> dict[int | str, dict[str, Any]]:
+    """Respuestas de error de una mutación con Idempotency-Key, para OpenAPI.
+
+    Recibe las excepciones de negocio que puede lanzar el endpoint y las agrupa por status
+    junto a las del mecanismo de idempotencia, de modo que cada `type` posible queda
+    documentado en el status que le corresponde (p. ej. el 409 de `/pantries/join` lista
+    `already-pantry-member` e `idempotency-request-in-progress`).
+    """
+    by_status: dict[int, list[type[DomainError]]] = {}
+    for error in (*business_errors, *_IDEMPOTENCY_ERRORS):
+        group = by_status.setdefault(error.status_code, [])
+        if error not in group:
+            group.append(error)
+
+    responses: dict[int | str, dict[str, Any]] = {}
+    for code in sorted(by_status):
+        errors = by_status[code]
+        lines = [f"- `{e.error_type}`: {_ERROR_NOTES.get(e, e.title)}" for e in errors]
+        content = _problem_content(errors)
+        description = "\n".join(lines)
+        if code == status.HTTP_422_UNPROCESSABLE_CONTENT:
+            # Conserva el 422 de validación de FastAPI (application/json) junto al problem+json.
+            content = {
+                "application/json": {
+                    "schema": {"$ref": "#/components/schemas/HTTPValidationError"}
+                },
+                **content,
+            }
+            description = "- Cuerpo inválido (validación, `application/json`)\n" + description
+        responses[code] = {"description": description, "content": content}
+    return responses
