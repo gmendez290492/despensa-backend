@@ -9,7 +9,7 @@ import structlog
 from fastapi import Depends, FastAPI, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from app.core.config import Settings, get_settings
+from app.core.config import Settings, get_settings, settings_dependency
 from app.core.database import create_db_engine, create_session_factory
 from app.core.exceptions import register_exception_handlers
 from app.core.health import (
@@ -36,7 +36,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     configure_logging(environment=settings.environment, log_level=settings.log_level)
 
-    engine = create_db_engine(settings.database_url)
+    engine = create_db_engine(
+        settings.database_url,
+        pool_size=settings.db_pool_size,
+        max_overflow=settings.db_max_overflow,
+        pool_timeout=settings.db_pool_timeout_seconds,
+    )
     app.state.db_engine = engine
     session_factory = create_session_factory(engine)
     app.state.db_session_factory = session_factory
@@ -68,14 +73,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.info("application_stopped")
 
 
-def get_db_check(request: Request) -> HealthCheckFn:
+async def get_db_check(request: Request) -> HealthCheckFn:
     """Provee la función de chequeo de PostgreSQL."""
     engine = cast(AsyncEngine, request.app.state.db_engine)
     return partial(check_database, engine)
 
 
-def get_rabbitmq_check(
-    settings: Annotated[Settings, Depends(get_settings)],
+async def get_rabbitmq_check(
+    settings: Annotated[Settings, Depends(settings_dependency)],
 ) -> HealthCheckFn:
     """Provee la función de chequeo de RabbitMQ."""
     return partial(check_rabbitmq, settings.rabbitmq_url)

@@ -16,7 +16,7 @@ import app.modules.pantry.models  # noqa: F401
 import app.modules.recipes.models  # noqa: F401
 import app.modules.users.models  # noqa: F401
 import app.shared.outbox  # noqa: F401
-from app.core.config import Settings, get_settings
+from app.core.config import Settings, get_settings, settings_dependency
 from app.core.database import Base, create_db_engine, create_session_factory
 from app.core.rate_limit import PostgresRateLimiter
 from app.main import create_app
@@ -130,7 +130,7 @@ def test_app(
 ) -> FastAPI:
     """Instancia de FastAPI con estado y configuración apuntando a despensa_test."""
     app = create_app()
-    app.dependency_overrides[get_settings] = lambda: test_settings
+    app.dependency_overrides[settings_dependency] = lambda: test_settings
     app.state.db_engine = db_engine
     app.state.db_session_factory = db_session_factory
     # Las pruebas de integración usan el backend real (PostgreSQL) del rate limiter.

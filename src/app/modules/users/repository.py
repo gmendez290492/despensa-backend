@@ -58,6 +58,25 @@ class UserRepository:
         self.session.add(auth_session)
         return auth_session
 
+    async def get_user_with_active_session(
+        self,
+        *,
+        user_id: UUID,
+        session_id: UUID,
+    ) -> User | None:
+        """Usuario dueño de una sesión no revocada, en una sola consulta (issue #16)."""
+        stmt = (
+            select(User)
+            .join(AuthSession, AuthSession.user_id == User.id)
+            .where(
+                AuthSession.id == session_id,
+                AuthSession.user_id == user_id,
+                AuthSession.revoked_at.is_(None),
+            )
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def get_auth_session(self, session_id: UUID) -> AuthSession | None:
         """Busca una sesión por su UUID."""
         return await self.session.get(AuthSession, session_id)

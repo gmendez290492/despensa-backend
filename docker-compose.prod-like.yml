@@ -1,0 +1,12 @@
+# Modo "como producción" para pruebas de carga en local (issue #16).
+#   docker compose -f docker-compose.yml -f docker-compose.prod-like.yml up -d --build api
+# Usa la imagen prod (sin --reload ni volúmenes de código) con varios workers de uvicorn.
+# Para volver al modo de desarrollo: docker compose up -d --build api
+services:
+  api:
+    build:
+      target: prod
+    volumes: !reset []
+    environment:
+      # uvicorn lee WEB_CONCURRENCY como número de workers por defecto.
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-4}

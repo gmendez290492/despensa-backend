@@ -28,13 +28,20 @@ class Base(DeclarativeBase):
     metadata = MetaData(naming_convention=NAMING_CONVENTION)
 
 
-def create_db_engine(database_url: str) -> AsyncEngine:
+def create_db_engine(
+    database_url: str,
+    *,
+    pool_size: int = 5,
+    max_overflow: int = 10,
+    pool_timeout: float = 30.0,
+) -> AsyncEngine:
     """Crea el motor asíncrono con pool de conexiones configurado."""
     return create_async_engine(
         database_url,
         pool_pre_ping=True,
-        pool_size=5,
-        max_overflow=10,
+        pool_size=pool_size,
+        max_overflow=max_overflow,
+        pool_timeout=pool_timeout,
     )
 
 

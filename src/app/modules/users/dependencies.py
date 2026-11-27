@@ -7,7 +7,7 @@ from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import Settings, get_settings
+from app.core.config import Settings, settings_dependency
 from app.core.database import get_db_session
 from app.core.rate_limit import RateLimiter, RateLimitPolicy, hash_identifier
 from app.core.security import decode_token
@@ -18,15 +18,15 @@ from app.modules.users.service import UserService
 bearer_scheme = HTTPBearer(auto_error=False)
 
 
-def get_user_service(
+async def get_user_service(
     session: Annotated[AsyncSession, Depends(get_db_session)],
-    settings: Annotated[Settings, Depends(get_settings)],
+    settings: Annotated[Settings, Depends(settings_dependency)],
 ) -> UserService:
     """Inyecta el servicio de usuarios para la petición actual."""
     return UserService(session=session, settings=settings)
 
 
-def get_rate_limiter(request: Request) -> RateLimiter:
+async def get_rate_limiter(request: Request) -> RateLimiter:
     """Retorna el rate limiter compartido configurado en el lifespan."""
     return cast(RateLimiter, request.app.state.rate_limiter)
 
@@ -39,7 +39,7 @@ def client_ip(request: Request) -> str:
 
 async def enforce_auth_rate_limit(
     request: Request,
-    settings: Annotated[Settings, Depends(get_settings)],
+    settings: Annotated[Settings, Depends(settings_dependency)],
     limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
 ) -> None:
     """Rate limit por IP y ruta en login, forgot-password y reset-password."""
@@ -53,7 +53,7 @@ async def enforce_auth_rate_limit(
 
 async def enforce_register_rate_limit(
     request: Request,
-    settings: Annotated[Settings, Depends(get_settings)],
+    settings: Annotated[Settings, Depends(settings_dependency)],
     limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
 ) -> None:
     """Rate limit estricto por IP en el registro (mitiga la enumeración vía 409)."""
@@ -67,7 +67,7 @@ async def enforce_register_rate_limit(
 
 async def enforce_refresh_rate_limit(
     request: Request,
-    settings: Annotated[Settings, Depends(get_settings)],
+    settings: Annotated[Settings, Depends(settings_dependency)],
     limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
 ) -> None:
     """Rate limit por IP y ruta en refresh y logout (frena el abuso con tokens inválidos)."""
@@ -98,7 +98,7 @@ async def enforce_email_rate_limit(
 async def get_current_user(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
     service: Annotated[UserService, Depends(get_user_service)],
-    settings: Annotated[Settings, Depends(get_settings)],
+    settings: Annotated[Settings, Depends(settings_dependency)],
 ) -> User:
     """Valida el JWT Bearer de acceso, que su sesión siga activa, y retorna el usuario."""
     if credentials is None or credentials.scheme.lower() != "bearer":

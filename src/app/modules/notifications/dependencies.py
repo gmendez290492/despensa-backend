@@ -5,7 +5,7 @@ from typing import Annotated
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import Settings, get_settings
+from app.core.config import Settings, settings_dependency
 from app.core.database import get_db_session
 from app.modules.notifications.scanner import ExpirationScanner
 from app.modules.notifications.service import NotificationService
@@ -13,8 +13,8 @@ from app.shared.adapters.smtp_email import SMTPEmailSender
 from app.shared.ports import EmailSender
 
 
-def get_email_sender(
-    settings: Annotated[Settings, Depends(get_settings)],
+async def get_email_sender(
+    settings: Annotated[Settings, Depends(settings_dependency)],
 ) -> EmailSender:
     """Inyecta el emisor de correos SMTP configurado."""
     return SMTPEmailSender(

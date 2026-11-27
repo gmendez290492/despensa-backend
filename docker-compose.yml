@@ -104,6 +104,10 @@ services:
       # Idempotency-Key (issue #11): TTL de 7 días para cubrir la outbox offline del frontend
       IDEMPOTENCY_KEY_TTL_HOURS: ${IDEMPOTENCY_KEY_TTL_HOURS:-168}
       IDEMPOTENCY_LOCK_TIMEOUT_MS: ${IDEMPOTENCY_LOCK_TIMEOUT_MS:-5000}
+      # Pool de BD por proceso (issue #16): conexiones máx = workers * (POOL_SIZE + MAX_OVERFLOW)
+      DB_POOL_SIZE: ${DB_POOL_SIZE:-5}
+      DB_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-10}
+      DB_POOL_TIMEOUT_SECONDS: ${DB_POOL_TIMEOUT_SECONDS:-30}
       # Local: confía en los rangos privados (gateway de Docker/Rancher). Nunca usar "*" fuera de local.
       FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}
       PYTHONPATH: /app/src
