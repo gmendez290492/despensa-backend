@@ -65,6 +65,20 @@ async def enforce_register_rate_limit(
     await limiter.check(client_ip(request), policy)
 
 
+async def enforce_refresh_rate_limit(
+    request: Request,
+    settings: Annotated[Settings, Depends(get_settings)],
+    limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
+) -> None:
+    """Rate limit por IP y ruta en refresh y logout (frena el abuso con tokens inválidos)."""
+    policy = RateLimitPolicy(
+        name="refresh_ip",
+        max_attempts=settings.refresh_rate_limit_max_attempts,
+        window_seconds=settings.refresh_rate_limit_window_seconds,
+    )
+    await limiter.check(f"{request.url.path}:{client_ip(request)}", policy)
+
+
 async def enforce_email_rate_limit(
     *,
     limiter: RateLimiter,

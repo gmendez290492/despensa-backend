@@ -46,14 +46,14 @@ docker compose exec -T api pytest -v
 | Ventana de gracia | Si el login envió `X-Client-Binding`, ese valor se exige en cada refresh y, durante `REFRESH_REUSE_GRACE_SECONDS` (10 s), el refresh anterior devuelve **el mismo par sucesor** en lugar de revocar. Sin binding no hay gracia. |
 | Registro duplicado | Se mantiene `409 email-already-exists` (riesgo aceptado de enumeración), mitigado con límite estricto por IP (`REGISTER_RATE_LIMIT_*`) y por email (`AUTH_EMAIL_RATE_LIMIT_*`). |
 | Login | Tiempo de respuesta igualado para correos inexistentes (verificación Argon2 contra un hash de referencia). |
-| Rate limiting | Backend `postgres` (tabla `rate_limit_buckets`), compartido entre réplicas y persistente entre deploys. Los `429` incluyen `Retry-After`. Las claves por email se guardan como SHA-256. |
+| Rate limiting | Backend `postgres` (tabla `rate_limit_buckets`), compartido entre réplicas y persistente entre deploys. Los `429` incluyen `Retry-After`. Las claves por email se guardan como SHA-256. `refresh` y `logout` limitan por IP y ruta (`REFRESH_RATE_LIMIT_*`, 30/min por defecto). |
 | IP del cliente | Uvicorn usa `X-Forwarded-For` solo si el emisor está en `FORWARDED_ALLOW_IPS`. En AWS es el CIDR de la VPC (el SG de ECS solo admite tráfico del ALB). **Nunca** usar `*` fuera de local. |
 | Recuperación | `forgot` responde `202` siempre. El worker genera el token (no viaja por Outbox ni broker), guarda solo su hash y envía el enlace `${FRONTEND_BASE_URL}/reset-password?token=...`. El reset revoca todas las sesiones. |
 
 **E2E del frontend:** la suite supera los límites por defecto. Relájalos solo en ese entorno, por ejemplo:
 
 ```powershell
-$env:AUTH_RATE_LIMIT_MAX_ATTEMPTS=1000; $env:REGISTER_RATE_LIMIT_MAX_ATTEMPTS=1000; $env:AUTH_EMAIL_RATE_LIMIT_MAX_ATTEMPTS=1000
+$env:AUTH_RATE_LIMIT_MAX_ATTEMPTS=1000; $env:REGISTER_RATE_LIMIT_MAX_ATTEMPTS=1000; $env:AUTH_EMAIL_RATE_LIMIT_MAX_ATTEMPTS=1000; $env:REFRESH_RATE_LIMIT_MAX_ATTEMPTS=1000
 docker compose up -d api
 ```
 

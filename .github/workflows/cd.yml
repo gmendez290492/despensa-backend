@@ -22,6 +22,10 @@ jobs:
         with:
           terraform_version: "1.8.5"
 
+      - name: Verificar formato de Terraform
+        working-directory: infra
+        run: terraform fmt -check -recursive -diff
+
       - name: Validar sintaxis de Terraform en dev
         working-directory: infra/environments/dev
         run: |

@@ -46,6 +46,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             max_window_seconds=max(
                 settings.auth_rate_limit_window_seconds,
                 settings.register_rate_limit_window_seconds,
+                settings.refresh_rate_limit_window_seconds,
                 settings.auth_email_rate_limit_window_seconds,
             ),
         )

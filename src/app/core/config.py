@@ -56,6 +56,10 @@ class Settings(BaseSettings):
     # Por IP en registro (más estricto para frenar la enumeración vía 409)
     register_rate_limit_max_attempts: int = 5
     register_rate_limit_window_seconds: int = 3600
+    # Por IP en refresh y logout. Más holgado: el BFF refresca con frecuencia, pero sin
+    # límite un cliente puede saturar la BD con refresh tokens inválidos.
+    refresh_rate_limit_max_attempts: int = 30
+    refresh_rate_limit_window_seconds: int = 60
     # Por email (hash SHA-256) en login, registro y forgot-password
     auth_email_rate_limit_max_attempts: int = 10
     auth_email_rate_limit_window_seconds: int = 900

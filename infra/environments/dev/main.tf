@@ -62,11 +62,11 @@ module "compute" {
 
 # 5. Control de Costos: Alerta de AWS Budgets a $5 USD
 resource "aws_budgets_budget" "cost_limit" {
-  name              = "despensa-budget-${var.environment}"
-  budget_type       = "COST"
-  limit_amount      = "5.0"
-  limit_unit        = "USD"
-  time_unit         = "MONTHLY"
+  name         = "despensa-budget-${var.environment}"
+  budget_type  = "COST"
+  limit_amount = "5.0"
+  limit_unit   = "USD"
+  time_unit    = "MONTHLY"
 
   notification {
     comparison_operator        = "GREATER_THAN"
