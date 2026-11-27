@@ -44,6 +44,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH="/app/.venv/bin:$PATH"
 
+# Parches de seguridad del SO: la imagen base puede ir por detrás de los fixes de Debian
+# (p. ej. CVE-2025-6020 en libpam), y Trivy falla el CI con CVEs HIGH/CRITICAL corregibles.
+RUN apt-get update && \
+    apt-get upgrade -y --no-install-recommends && \
+    rm -rf /var/lib/apt/lists/*
+
 RUN groupadd --gid 10001 appgroup && \
     useradd --uid 10001 --gid appgroup --shell /usr/sbin/nologin --create-home appuser
 

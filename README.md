@@ -27,6 +27,14 @@ Ver logs de API y Worker:
 docker compose logs -f api worker
 ```
 
+Alertas de caducidad automáticas (scheduler, opt-in). Sin él, solo se generan con `POST /api/v1/notifications/scan`:
+```powershell
+docker compose --profile scheduler up -d scheduler
+# Para probar sin esperar una hora: $env:EXPIRATION_SCAN_INTERVAL_SECONDS=60 antes del comando
+```
+
+**Límites en local:** sin proxy delante de Next.js, todos los usuarios y pestañas llegan a FastAPI con la misma IP y comparten cada rate limit (p. ej. 5 registros por hora en total). Para probar con varias cuentas, copia `.env.example` a `.env`, descomenta el bloque "Pruebas locales / E2E" y ejecuta `docker compose up -d api`.
+
 Ejecutar suite completa de calidad, seguridad y pruebas:
 ```powershell
 docker compose exec -T api ruff check .
