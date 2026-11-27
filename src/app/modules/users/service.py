@@ -227,14 +227,15 @@ class UserService:
 
     async def get_active_user_for_session(self, user_id: UUID, session_id: UUID) -> User:
         """Valida que la sesión del access token siga activa y retorna el usuario."""
-        auth_session = await self.users.get_auth_session(session_id)
-        if (
-            auth_session is None
-            or auth_session.revoked_at is not None
-            or auth_session.user_id != user_id
-        ):
+        user = await self.users.get_user_with_active_session(
+            user_id=user_id,
+            session_id=session_id,
+        )
+        if user is None:
             raise InvalidTokenError("La sesión fue cerrada o revocada.")
-        return await self.get_active_user(user_id)
+        if not user.is_active:
+            raise InvalidCredentialsError("La cuenta de usuario está desactivada.")
+        return user
 
     # --- Recuperación de contraseña ------------------------------------------------------
 

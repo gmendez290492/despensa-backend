@@ -100,6 +100,41 @@ Las mutaciones de pantry aceptan la cabecera opcional `Idempotency-Key` (`^[A-Za
 - Las claves pertenecen al usuario (`idempotency_keys`, PK `(user_id, key)`): la misma clave de otro usuario no colisiona ni expone su respuesta.
 - Caducan a las `IDEMPOTENCY_KEY_TTL_HOURS` (168 h = 7 días). Una clave caducada se trata como nueva, así que **la outbox del frontend no debe reenviar operaciones más antiguas que el TTL**. Las caducadas se purgan de forma oportunista, sin depender del scheduler.
 
+## Rendimiento y pruebas de carga (issue #16)
+
+El servicio `api` de `docker-compose.yml` usa la imagen **dev** (`uvicorn --reload`, un solo
+proceso): sirve para desarrollar, no para medir. Para pruebas de carga, levanta la imagen prod
+con varios workers:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod-like.yml up -d --build api
+# WEB_CONCURRENCY=2 docker compose -f docker-compose.yml -f docker-compose.prod-like.yml up -d --build api
+docker compose up -d --build api   # volver al modo dev
+```
+
+Medición local (k6, 50 VUs sin pausa, 4 GET en paralelo por iteración: pantries, batches,
+locations y notifications):
+
+| Configuración | req/s | p50 | p95 |
+|---|---|---|---|
+| dev, `--reload`, 1 proceso (antes) | 110 | 1 060 ms | 2 530 ms |
+| prod, 1 worker (antes) | 121 | 967 ms | 2 290 ms |
+| prod, 4 workers (antes) | 347 | 338 ms | 761 ms |
+| prod, 1 worker (con #16) | 163 | 675 ms | 1 905 ms |
+| prod, 4 workers (con #16) | 418 | 212 ms | 713 ms |
+
+- El cuello de botella es la **CPU de cada proceso** (≈100 % con 1 worker), no el pool de
+  conexiones (el checkout es ~1 % del perfil) ni el rate limit, que solo se aplica en
+  `/auth/*` y no en las lecturas.
+- Optimizaciones de #16: middlewares ASGI puros (sin `BaseHTTPMiddleware`), dependencias
+  `async` (FastAPI ejecuta las síncronas en el threadpool) y validación de sesión + usuario en
+  una sola consulta. `tests/unit/test_request_overhead.py` impide reintroducir dependencias
+  síncronas.
+- Con carga cerrada sin pausa, la latencia depende de la concurrencia: con 200 peticiones en
+  vuelo y ~420 req/s, la media ronda los 480 ms (ley de Little). Más capacidad = más workers o
+  más tareas en ECS.
+- Pool: `DB_POOL_SIZE`, `DB_MAX_OVERFLOW` y `DB_POOL_TIMEOUT_SECONDS` son **por proceso**.
+
 ## URLs útiles en local
 
 - **Swagger UI (API):** http://localhost:8000/docs

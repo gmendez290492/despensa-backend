@@ -74,6 +74,11 @@ class Settings(BaseSettings):
 
     # Idempotencia (Idempotency-Key) de mutaciones. El TTL cubre la outbox offline del
     # frontend: una operación más antigua que esto ya no se protege ante duplicados.
+    # Pool de conexiones por proceso (issue #16). Con N workers, el máximo de conexiones
+    # es N * (db_pool_size + db_max_overflow): debe caber en max_connections de Postgres.
+    db_pool_size: int = Field(default=5, ge=1)
+    db_max_overflow: int = Field(default=10, ge=0)
+    db_pool_timeout_seconds: float = Field(default=30.0, gt=0)
     idempotency_key_ttl_hours: int = Field(default=168, ge=1)
     # Espera máxima a otra petición en curso con la misma clave antes del 409.
     idempotency_lock_timeout_ms: int = Field(default=5000, ge=100)
@@ -107,3 +112,12 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     """Retorna la instancia cacheada de configuración."""
     return Settings()
+
+
+async def settings_dependency() -> Settings:
+    """Dependencia FastAPI de configuración.
+
+    Es `async` a propósito: FastAPI ejecuta las dependencias síncronas en el threadpool,
+    y ese salto de hilo por petición se notaba en el perfil (issue #16).
+    """
+    return get_settings()

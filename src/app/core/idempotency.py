@@ -32,7 +32,7 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.core.config import Settings, get_settings
+from app.core.config import Settings, settings_dependency
 from app.core.database import Base, get_db_session
 from app.core.exceptions import DomainError, RateLimitExceededError, problem_details
 
@@ -366,7 +366,7 @@ class IdempotencyGuard:
 async def get_idempotency_guard(
     request: Request,
     session: Annotated[AsyncSession, Depends(get_db_session)],
-    settings: Annotated[Settings, Depends(get_settings)],
+    settings: Annotated[Settings, Depends(settings_dependency)],
     idempotency_key: Annotated[
         str | None,
         Header(

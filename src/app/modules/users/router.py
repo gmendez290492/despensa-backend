@@ -4,7 +4,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, Request, Response, status
 
-from app.core.config import Settings, get_settings
+from app.core.config import Settings, settings_dependency
 from app.core.rate_limit import RateLimiter
 from app.modules.users.dependencies import (
     enforce_auth_rate_limit,
@@ -58,7 +58,7 @@ async def register(
     payload: UserRegisterRequest,
     service: Annotated[UserService, Depends(get_user_service)],
     limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
-    settings: Annotated[Settings, Depends(get_settings)],
+    settings: Annotated[Settings, Depends(settings_dependency)],
 ) -> UserResponse:
     """Registra una cuenta nueva y emite el evento user.registered.v1."""
     await enforce_email_rate_limit(
@@ -81,7 +81,7 @@ async def login(
     payload: UserLoginRequest,
     service: Annotated[UserService, Depends(get_user_service)],
     limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
-    settings: Annotated[Settings, Depends(get_settings)],
+    settings: Annotated[Settings, Depends(settings_dependency)],
     client_binding: ClientBinding = None,
 ) -> TokenResponse:
     """Autentica al usuario, abre una sesión y devuelve access y refresh tokens."""
@@ -133,7 +133,7 @@ async def forgot_password(
     payload: PasswordForgotRequest,
     service: Annotated[UserService, Depends(get_user_service)],
     limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
-    settings: Annotated[Settings, Depends(get_settings)],
+    settings: Annotated[Settings, Depends(settings_dependency)],
 ) -> MessageResponse:
     """Solicita el correo de recuperación. Responde igual exista o no la cuenta."""
     await enforce_email_rate_limit(
