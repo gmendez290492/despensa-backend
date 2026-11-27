@@ -113,6 +113,10 @@ resource "aws_sns_topic_subscription" "notifications_subscription" {
   protocol  = "sqs"
   endpoint  = aws_sqs_queue.notifications_queue.arn
 
+  # El worker recibe el EventEnvelope tal cual (sin el sobre JSON de SNS). Los atributos
+  # del mensaje (event_type) siguen viajando y el filtro sigue aplicando.
+  raw_message_delivery = true
+
   filter_policy = jsonencode({
     event_type = [
       "user.registered.v1",

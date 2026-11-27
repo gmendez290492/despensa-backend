@@ -58,6 +58,10 @@ module "compute" {
   jwt_secret_key        = var.jwt_secret_key
   trusted_proxy_cidr    = module.network.vpc_cidr
   frontend_base_url     = var.frontend_base_url
+
+  notifications_queue_url = module.messaging.notifications_queue_url
+  notifications_queue_arn = module.messaging.notifications_queue_arn
+  ses_from_email          = var.ses_from_email
 }
 
 # 5. Control de Costos: Alerta de AWS Budgets a $5 USD

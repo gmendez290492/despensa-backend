@@ -57,6 +57,23 @@ $env:AUTH_RATE_LIMIT_MAX_ATTEMPTS=1000; $env:REGISTER_RATE_LIMIT_MAX_ATTEMPTS=10
 docker compose up -d api
 ```
 
+## Worker en AWS
+
+En AWS el worker corre como **contenedor sidecar** dentro de la misma tarea Fargate que la API: comparten CPU y memoria, y así no se paga una segunda tarea. Los backends se eligen por entorno:
+
+| Variable | Local (compose) | AWS (ECS) |
+|---|---|---|
+| `MESSAGING_BACKEND` | `rabbitmq` | `aws`: el Outbox publica en SNS y el worker consume la cola SQS de notificaciones |
+| `EMAIL_BACKEND` | `smtp` (Mailpit) | `ses` |
+| `SNS_TOPIC_ARN`, `SQS_NOTIFICATIONS_QUEUE_URL` | — | Obligatorias con `MESSAGING_BACKEND=aws` |
+
+- La suscripción SNS → SQS usa `raw_message_delivery`, así que el cuerpo es el `EventEnvelope` tal cual. El consumidor también acepta el sobre de SNS por si se desactiva.
+- Un mensaje solo se borra si su handler termina bien. Si falla, SQS lo reentrega tras el *visibility timeout* y, a las 3 recepciones, lo mueve a la DLQ. Los eventos sin handler se confirman y se ignoran.
+- El contenedor `worker` no es esencial: si cae, la API sigue sirviendo y ECS lo reinicia (`restartPolicy`).
+- En ECS no se pasan credenciales: boto3 usa el rol de la tarea, con permisos mínimos sobre la cola y la identidad SES.
+- **SES:** `ses_from_email` (en `terraform.tfvars`) se crea como identidad y AWS envía un correo de verificación a esa dirección. Mientras la cuenta siga en el *sandbox* de SES, los destinatarios también tienen que estar verificados.
+- El emulador de AWS del compose no reparte de SNS a SQS, así que en local el flujo completo se prueba con RabbitMQ.
+
 ## URLs útiles en local
 
 - **Swagger UI (API):** http://localhost:8000/docs

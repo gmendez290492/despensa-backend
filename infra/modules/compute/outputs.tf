@@ -10,6 +10,10 @@ output "ecs_cluster_name" {
   value = aws_ecs_cluster.main.name
 }
 
+output "ses_identity_arn" {
+  value = aws_ses_email_identity.sender.arn
+}
+
 output "ecs_service_name" {
   value = aws_ecs_service.api.name
 }

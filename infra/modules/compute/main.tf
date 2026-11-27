@@ -92,6 +92,39 @@ resource "aws_iam_role_policy" "ecs_task_sns" {
   })
 }
 
+# Identidad SES del remitente. AWS envía un correo de verificación a esa dirección.
+# Mientras la cuenta esté en el sandbox de SES, los destinatarios también deben verificarse.
+resource "aws_ses_email_identity" "sender" {
+  email = var.ses_from_email
+}
+
+# El worker (sidecar de la tarea) consume la cola de notificaciones y envía con SES
+resource "aws_iam_role_policy" "ecs_task_worker" {
+  name = "despensa-task-worker-policy-${var.environment}"
+  role = aws_iam_role.ecs_task_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "sqs:ReceiveMessage",
+          "sqs:DeleteMessage",
+          "sqs:ChangeMessageVisibility",
+          "sqs:GetQueueAttributes"
+        ]
+        Resource = var.notifications_queue_arn
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["ses:SendEmail", "ses:SendRawEmail"]
+        Resource = aws_ses_email_identity.sender.arn
+      }
+    ]
+  })
+}
+
 # 5. Application Load Balancer
 resource "aws_lb" "api" {
   name               = "despensa-alb-${var.environment}"
@@ -134,7 +167,19 @@ resource "aws_lb_listener" "http" {
   }
 }
 
-# 6. Definición de Tarea ECS Fargate
+# 6. Definición de Tarea ECS Fargate: API + worker como sidecar.
+# Comparten CPU/memoria de la tarea para no pagar una segunda tarea Fargate.
+locals {
+  common_environment = [
+    { name = "ENVIRONMENT", value = var.environment },
+    { name = "DATABASE_URL", value = var.database_url },
+    { name = "JWT_SECRET_KEY", value = var.jwt_secret_key },
+    { name = "AWS_DEFAULT_REGION", value = "us-east-1" },
+    { name = "SNS_TOPIC_ARN", value = var.sns_topic_arn },
+    { name = "FRONTEND_BASE_URL", value = var.frontend_base_url }
+  ]
+}
+
 resource "aws_ecs_task_definition" "api" {
   family                   = "despensa-api-${var.environment}"
   network_mode             = "awsvpc"
@@ -155,22 +200,43 @@ resource "aws_ecs_task_definition" "api" {
           hostPort      = 8000
         }
       ]
-      environment = [
-        { name = "ENVIRONMENT", value = var.environment },
-        { name = "DATABASE_URL", value = var.database_url },
-        { name = "JWT_SECRET_KEY", value = var.jwt_secret_key },
-        { name = "AWS_DEFAULT_REGION", value = "us-east-1" },
-        { name = "SNS_TOPIC_ARN", value = var.sns_topic_arn },
+      environment = concat(local.common_environment, [
         { name = "RATE_LIMIT_BACKEND", value = "postgres" },
-        { name = "FORWARDED_ALLOW_IPS", value = var.trusted_proxy_cidr },
-        { name = "FRONTEND_BASE_URL", value = var.frontend_base_url }
-      ]
+        { name = "FORWARDED_ALLOW_IPS", value = var.trusted_proxy_cidr }
+      ])
       logConfiguration = {
         logDriver = "awslogs"
         options = {
           "awslogs-group"         = aws_cloudwatch_log_group.ecs.name
           "awslogs-region"        = "us-east-1"
           "awslogs-stream-prefix" = "api"
+        }
+      }
+    },
+    {
+      name    = "worker"
+      image   = var.app_image
+      command = ["python", "-m", "app.worker"]
+      # No esencial: si el worker cae, la API sigue sirviendo. ECS lo reinicia en el
+      # sitio y los eventos esperan en el Outbox y en SQS (con DLQ) mientras tanto.
+      essential = false
+      restartPolicy = {
+        enabled              = true
+        restartAttemptPeriod = 60
+      }
+      environment = concat(local.common_environment, [
+        { name = "APP_NAME", value = "Despensa Worker" },
+        { name = "MESSAGING_BACKEND", value = "aws" },
+        { name = "EMAIL_BACKEND", value = "ses" },
+        { name = "SQS_NOTIFICATIONS_QUEUE_URL", value = var.notifications_queue_url },
+        { name = "SMTP_FROM_EMAIL", value = var.ses_from_email }
+      ])
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = aws_cloudwatch_log_group.ecs.name
+          "awslogs-region"        = "us-east-1"
+          "awslogs-stream-prefix" = "worker"
         }
       }
     }
