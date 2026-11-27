@@ -39,6 +39,8 @@ def _build_test_settings() -> Settings:
             "auth_rate_limit_window_seconds": 60,
             "register_rate_limit_max_attempts": 20,
             "register_rate_limit_window_seconds": 3600,
+            "refresh_rate_limit_max_attempts": 30,
+            "refresh_rate_limit_window_seconds": 60,
             "auth_email_rate_limit_max_attempts": 20,
             "auth_email_rate_limit_window_seconds": 900,
         },

@@ -46,16 +46,33 @@ docker compose exec -T api pytest -v
 | Ventana de gracia | Si el login envió `X-Client-Binding`, ese valor se exige en cada refresh y, durante `REFRESH_REUSE_GRACE_SECONDS` (10 s), el refresh anterior devuelve **el mismo par sucesor** en lugar de revocar. Sin binding no hay gracia. |
 | Registro duplicado | Se mantiene `409 email-already-exists` (riesgo aceptado de enumeración), mitigado con límite estricto por IP (`REGISTER_RATE_LIMIT_*`) y por email (`AUTH_EMAIL_RATE_LIMIT_*`). |
 | Login | Tiempo de respuesta igualado para correos inexistentes (verificación Argon2 contra un hash de referencia). |
-| Rate limiting | Backend `postgres` (tabla `rate_limit_buckets`), compartido entre réplicas y persistente entre deploys. Los `429` incluyen `Retry-After`. Las claves por email se guardan como SHA-256. |
+| Rate limiting | Backend `postgres` (tabla `rate_limit_buckets`), compartido entre réplicas y persistente entre deploys. Los `429` incluyen `Retry-After`. Las claves por email se guardan como SHA-256. `refresh` y `logout` limitan por IP y ruta (`REFRESH_RATE_LIMIT_*`, 30/min por defecto). |
 | IP del cliente | Uvicorn usa `X-Forwarded-For` solo si el emisor está en `FORWARDED_ALLOW_IPS`. En AWS es el CIDR de la VPC (el SG de ECS solo admite tráfico del ALB). **Nunca** usar `*` fuera de local. |
 | Recuperación | `forgot` responde `202` siempre. El worker genera el token (no viaja por Outbox ni broker), guarda solo su hash y envía el enlace `${FRONTEND_BASE_URL}/reset-password?token=...`. El reset revoca todas las sesiones. |
 
 **E2E del frontend:** la suite supera los límites por defecto. Relájalos solo en ese entorno, por ejemplo:
 
 ```powershell
-$env:AUTH_RATE_LIMIT_MAX_ATTEMPTS=1000; $env:REGISTER_RATE_LIMIT_MAX_ATTEMPTS=1000; $env:AUTH_EMAIL_RATE_LIMIT_MAX_ATTEMPTS=1000
+$env:AUTH_RATE_LIMIT_MAX_ATTEMPTS=1000; $env:REGISTER_RATE_LIMIT_MAX_ATTEMPTS=1000; $env:AUTH_EMAIL_RATE_LIMIT_MAX_ATTEMPTS=1000; $env:REFRESH_RATE_LIMIT_MAX_ATTEMPTS=1000
 docker compose up -d api
 ```
+
+## Worker en AWS
+
+En AWS el worker corre como **contenedor sidecar** dentro de la misma tarea Fargate que la API: comparten CPU y memoria, y así no se paga una segunda tarea. Los backends se eligen por entorno:
+
+| Variable | Local (compose) | AWS (ECS) |
+|---|---|---|
+| `MESSAGING_BACKEND` | `rabbitmq` | `aws`: el Outbox publica en SNS y el worker consume la cola SQS de notificaciones |
+| `EMAIL_BACKEND` | `smtp` (Mailpit) | `ses` |
+| `SNS_TOPIC_ARN`, `SQS_NOTIFICATIONS_QUEUE_URL` | — | Obligatorias con `MESSAGING_BACKEND=aws` |
+
+- La suscripción SNS → SQS usa `raw_message_delivery`, así que el cuerpo es el `EventEnvelope` tal cual. El consumidor también acepta el sobre de SNS por si se desactiva.
+- Un mensaje solo se borra si su handler termina bien. Si falla, SQS lo reentrega tras el *visibility timeout* y, a las 3 recepciones, lo mueve a la DLQ. Los eventos sin handler se confirman y se ignoran.
+- El contenedor `worker` no es esencial: si cae, la API sigue sirviendo y ECS lo reinicia (`restartPolicy`).
+- En ECS no se pasan credenciales: boto3 usa el rol de la tarea, con permisos mínimos sobre la cola y la identidad SES.
+- **SES:** `ses_from_email` (en `terraform.tfvars`) se crea como identidad y AWS envía un correo de verificación a esa dirección. Mientras la cuenta siga en el *sandbox* de SES, los destinatarios también tienen que estar verificados.
+- El emulador de AWS del compose no reparte de SNS a SQS, así que en local el flujo completo se prueba con RabbitMQ.
 
 ## URLs útiles en local
 

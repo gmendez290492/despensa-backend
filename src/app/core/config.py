@@ -3,7 +3,7 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -56,9 +56,21 @@ class Settings(BaseSettings):
     # Por IP en registro (más estricto para frenar la enumeración vía 409)
     register_rate_limit_max_attempts: int = 5
     register_rate_limit_window_seconds: int = 3600
+    # Por IP en refresh y logout. Más holgado: el BFF refresca con frecuencia, pero sin
+    # límite un cliente puede saturar la BD con refresh tokens inválidos.
+    refresh_rate_limit_max_attempts: int = 30
+    refresh_rate_limit_window_seconds: int = 60
     # Por email (hash SHA-256) en login, registro y forgot-password
     auth_email_rate_limit_max_attempts: int = 10
     auth_email_rate_limit_window_seconds: int = 900
+
+    # Backends del worker. Local: RabbitMQ + SMTP (Mailpit). AWS: SNS/SQS + SES.
+    messaging_backend: Literal["rabbitmq", "aws"] = "rabbitmq"
+    email_backend: Literal["smtp", "ses"] = "smtp"
+    sns_topic_arn: str | None = None
+    sqs_notifications_queue_url: str | None = None
+    sqs_wait_time_seconds: int = Field(default=20, ge=0, le=20)
+    sqs_max_messages: int = Field(default=10, ge=1, le=10)
 
     # Configuración de AWS / LocalStack / AWS Emulator
     aws_endpoint_url: str | None = None
@@ -66,6 +78,23 @@ class Settings(BaseSettings):
     aws_access_key_id: str = "mock_key"
     aws_secret_access_key: str = Field(default="mock_secret", repr=False)
     s3_bucket_name: str = "despensa-media-local"
+
+    @model_validator(mode="after")
+    def _require_aws_messaging_targets(self) -> "Settings":
+        if self.messaging_backend == "aws" and not (
+            self.sns_topic_arn and self.sqs_notifications_queue_url
+        ):
+            raise ValueError(
+                "MESSAGING_BACKEND=aws requiere SNS_TOPIC_ARN y SQS_NOTIFICATIONS_QUEUE_URL.",
+            )
+        return self
+
+    def aws_static_credentials(self) -> tuple[str | None, str | None]:
+        """Credenciales explícitas solo contra un emulador (AWS_ENDPOINT_URL). En ECS se
+        devuelven None para que boto3 use las del rol de la tarea."""
+        if self.aws_endpoint_url:
+            return self.aws_access_key_id, self.aws_secret_access_key
+        return None, None
 
 
 @lru_cache

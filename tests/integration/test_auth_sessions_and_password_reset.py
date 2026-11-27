@@ -283,6 +283,54 @@ async def test_login_rate_limit_by_email_across_ips(
             assert res.status_code == expected
 
 
+async def test_refresh_rate_limit_by_ip_returns_429_with_retry_after(
+    api_client: AsyncClient,
+    test_settings: Settings,
+) -> None:
+    """/auth/refresh limita por IP: tokens inválidos repetidos acaban en 429."""
+    test_settings.refresh_rate_limit_max_attempts = 3
+    for _ in range(3):
+        res = await api_client.post(
+            "/api/v1/auth/refresh",
+            json={"refresh_token": "not-a-valid-token"},
+        )
+        assert res.status_code == 401
+
+    blocked = await api_client.post(
+        "/api/v1/auth/refresh",
+        json={"refresh_token": "not-a-valid-token"},
+    )
+    assert blocked.status_code == 429
+    assert int(blocked.headers["Retry-After"]) >= 1
+
+
+async def test_refresh_and_logout_rate_limits_are_counted_separately(
+    api_client: AsyncClient,
+    test_settings: Settings,
+) -> None:
+    """Agotar el límite de refresh no impide cerrar sesión (la clave incluye la ruta)."""
+    await _register(api_client, "rl-refresh@example.com")
+    tokens = await _login(api_client, "rl-refresh@example.com")
+    test_settings.refresh_rate_limit_max_attempts = 1
+
+    first = await api_client.post(
+        "/api/v1/auth/refresh",
+        json={"refresh_token": tokens["refresh_token"]},
+    )
+    assert first.status_code == 200
+    blocked = await api_client.post(
+        "/api/v1/auth/refresh",
+        json={"refresh_token": first.json()["refresh_token"]},
+    )
+    assert blocked.status_code == 429
+
+    logout = await api_client.post(
+        "/api/v1/auth/logout",
+        json={"refresh_token": first.json()["refresh_token"]},
+    )
+    assert logout.status_code == 204
+
+
 async def test_client_ip_comes_from_forwarded_header_only_via_uvicorn(
     test_app: FastAPI,
     test_settings: Settings,

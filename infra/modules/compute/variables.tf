@@ -52,6 +52,21 @@ variable "trusted_proxy_cidr" {
   type        = string
 }
 
+variable "notifications_queue_url" {
+  description = "URL de la cola SQS de notificaciones que consume el worker"
+  type        = string
+}
+
+variable "notifications_queue_arn" {
+  description = "ARN de la cola SQS de notificaciones (permisos IAM del worker)"
+  type        = string
+}
+
+variable "ses_from_email" {
+  description = "Remitente de los correos. Se crea como identidad SES y hay que verificarla"
+  type        = string
+}
+
 variable "frontend_base_url" {
   description = "URL pública del frontend, usada en los enlaces de recuperación de contraseña"
   type        = string
