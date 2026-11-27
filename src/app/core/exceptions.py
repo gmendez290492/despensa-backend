@@ -1,7 +1,11 @@
 """Excepciones base de dominio y manejador HTTP estándar RFC 7807."""
 
 from fastapi import FastAPI, Request, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+
+ERRORS_BASE_URI = "https://despensa.api/errors/"
+VALIDATION_ERROR_TYPE = "validation-error"
 
 
 class DomainError(Exception):
@@ -33,7 +37,7 @@ class RateLimitExceededError(DomainError):
 def problem_details(request: Request, exc: DomainError) -> dict[str, object]:
     """Cuerpo RFC 7807 de un error de dominio (también se guarda para repetirlo)."""
     return {
-        "type": f"https://despensa.api/errors/{exc.error_type}",
+        "type": f"{ERRORS_BASE_URI}{exc.error_type}",
         "title": exc.title,
         "status": exc.status_code,
         "detail": exc.detail,
@@ -52,4 +56,33 @@ def register_exception_handlers(app: FastAPI) -> None:
             media_type="application/problem+json",
             headers=exc.headers or None,
             content=problem_details(request, exc),
+        )
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_error_handler(
+        request: Request,
+        exc: RequestValidationError,
+    ) -> JSONResponse:
+        # problem+json como el resto de errores (issue #21). Solo loc/msg/type: el `input`
+        # que añade FastAPI podría devolver datos sensibles del cuerpo (p. ej. contraseñas).
+        errors = [
+            {
+                "loc": list(err.get("loc", ())),
+                "msg": str(err.get("msg", "")),
+                "type": err.get("type"),
+            }
+            for err in exc.errors()
+        ]
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            media_type="application/problem+json",
+            content={
+                "type": f"{ERRORS_BASE_URI}{VALIDATION_ERROR_TYPE}",
+                "title": "Validation Error",
+                "status": status.HTTP_422_UNPROCESSABLE_CONTENT,
+                "detail": errors[0]["msg"] if errors else "La petición contiene datos inválidos.",
+                "instance": str(request.url.path),
+                "correlation_id": getattr(request.state, "correlation_id", None),
+                "errors": errors,
+            },
         )

@@ -1,11 +1,11 @@
 """Endpoint agregado del dashboard: 1 llamada en lugar de 4 por carga del panel (issue #16)."""
 
-from typing import Annotated, Any
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
 
-from app.core.idempotency import idempotency_responses
+from app.core.openapi import problem_responses
 from app.modules.dashboard.schemas import PantryDashboardResponse
 from app.modules.notifications.dependencies import NotificationServiceDep
 from app.modules.pantry.dependencies import PantryServiceDep
@@ -18,19 +18,12 @@ router = APIRouter(prefix="/api/v1", tags=["dashboard"])
 
 CurrentUserDep = Annotated[User, Depends(get_current_user)]
 
-# Solo el 403 de negocio: es una lectura, así que no lleva los errores de Idempotency-Key.
-_RESPONSES: dict[int | str, dict[str, Any]] = {
-    code: spec
-    for code, spec in idempotency_responses(PantryAccessDeniedError).items()
-    if code == 403
-}
-
 
 @router.get(
     "/pantries/{pantry_id}/dashboard",
     response_model=PantryDashboardResponse,
     summary="Datos del panel de una despensa en una sola llamada",
-    responses=_RESPONSES,
+    responses=problem_responses(PantryAccessDeniedError),
 )
 async def get_pantry_dashboard(
     pantry_id: UUID,

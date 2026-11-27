@@ -46,7 +46,7 @@ def test_join_409_lists_business_and_idempotency_conflicts(openapi: dict[str, An
         ),
         ("/api/v1/pantries/{pantry_id}/locations", "403", {"pantry-access-denied"}),
         ("/api/v1/products", "400", {"unit-not-found", "invalid-idempotency-key"}),
-        ("/api/v1/pantries", "422", {"idempotency-key-reused"}),
+        ("/api/v1/pantries", "422", {"validation-error", "idempotency-key-reused"}),
     ],
 )
 def test_mutations_document_their_problem_types(
@@ -58,8 +58,61 @@ def test_mutations_document_their_problem_types(
     assert _types(openapi, path, status) == expected
 
 
-def test_422_keeps_fastapi_validation_schema(openapi: dict[str, Any]) -> None:
-    content = openapi["paths"]["/api/v1/pantries/join"]["post"]["responses"]["422"]["content"]
-    assert (
-        content["application/json"]["schema"]["$ref"] == "#/components/schemas/HTTPValidationError"
-    )
+def _operations(openapi: dict[str, Any]) -> list[tuple[str, str, dict[str, Any]]]:
+    return [
+        (path, method, op)
+        for path, item in openapi["paths"].items()
+        for method, op in item.items()
+        if isinstance(op, dict) and "responses" in op
+    ]
+
+
+def test_every_422_is_problem_json_with_validation_error(openapi: dict[str, Any]) -> None:
+    """Issue #21: un solo media type para el 422 en todo el contrato."""
+    with_422 = [(p, m, op) for p, m, op in _operations(openapi) if "422" in op["responses"]]
+    assert with_422
+    for path, method, op in with_422:
+        content = op["responses"]["422"]["content"]
+        assert list(content) == ["application/problem+json"], (method, path)
+        schema = content["application/problem+json"]["schema"]
+        assert ERRORS + "validation-error" in schema["properties"]["type"]["enum"], (method, path)
+        assert "errors" in schema["properties"]
+    assert "HTTPValidationError" not in openapi["components"]["schemas"]
+
+
+def test_422_of_idempotent_mutations_keeps_key_reused(openapi: dict[str, Any]) -> None:
+    assert _types(openapi, "/api/v1/pantries/join", "422") == {
+        "validation-error",
+        "idempotency-key-reused",
+    }
+
+
+def test_every_bearer_operation_documents_401(openapi: dict[str, Any]) -> None:
+    """Issue #21: 401 en todas las rutas que exigen Bearer."""
+    secured = [(p, m, op) for p, m, op in _operations(openapi) if op.get("security")]
+    assert len(secured) >= 16
+    for path, method, op in secured:
+        enum = op["responses"]["401"]["content"]["application/problem+json"]["schema"][
+            "properties"
+        ]["type"]["enum"]
+        assert ERRORS + "invalid-token" in enum, (method, path)
+
+
+@pytest.mark.parametrize(
+    ("path", "expected"),
+    [
+        ("/api/v1/auth/login", {"invalid-credentials"}),
+        ("/api/v1/auth/refresh", {"invalid-token"}),
+        ("/api/v1/auth/logout", {"invalid-token"}),
+    ],
+)
+def test_auth_routes_document_their_401(
+    openapi: dict[str, Any], path: str, expected: set[str]
+) -> None:
+    assert _types(openapi, path, "401") == expected
+
+
+def test_dashboard_documents_403_401_and_422(openapi: dict[str, Any]) -> None:
+    path = "/api/v1/pantries/{pantry_id}/dashboard"
+    responses = openapi["paths"][path]["get"]["responses"]
+    assert {"200", "401", "403", "422"} <= set(responses)

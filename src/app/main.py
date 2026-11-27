@@ -21,11 +21,13 @@ from app.core.health import (
 )
 from app.core.logging import configure_logging
 from app.core.middleware import CorrelationIdMiddleware, SecurityHeadersMiddleware
+from app.core.openapi import install_openapi
 from app.core.rate_limit import InMemoryRateLimiter, PostgresRateLimiter, RateLimiter
 from app.modules.dashboard.router import router as dashboard_router
 from app.modules.notifications.router import router as notifications_router
 from app.modules.pantry.router import router as pantry_router
 from app.modules.recipes.router import router as recipes_router
+from app.modules.users.exceptions import InvalidCredentialsError, InvalidTokenError
 from app.modules.users.router import router as users_router
 
 logger = structlog.get_logger(__name__)
@@ -101,6 +103,7 @@ def create_app() -> FastAPI:
     app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(CorrelationIdMiddleware)
     register_exception_handlers(app)
+    install_openapi(app, bearer_errors=(InvalidTokenError, InvalidCredentialsError))
     app.include_router(users_router)
     app.include_router(pantry_router)
     app.include_router(notifications_router)

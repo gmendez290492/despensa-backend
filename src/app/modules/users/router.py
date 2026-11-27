@@ -5,6 +5,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Header, Request, Response, status
 
 from app.core.config import Settings, settings_dependency
+from app.core.openapi import problem_responses
 from app.core.rate_limit import RateLimiter
 from app.modules.users.dependencies import (
     enforce_auth_rate_limit,
@@ -15,6 +16,7 @@ from app.modules.users.dependencies import (
     get_rate_limiter,
     get_user_service,
 )
+from app.modules.users.exceptions import InvalidCredentialsError, InvalidTokenError
 from app.modules.users.models import User
 from app.modules.users.schemas import (
     MessageResponse,
@@ -76,6 +78,7 @@ async def register(
     "/auth/login",
     response_model=TokenResponse,
     dependencies=[Depends(enforce_auth_rate_limit)],
+    responses=problem_responses(InvalidCredentialsError),
 )
 async def login(
     payload: UserLoginRequest,
@@ -98,6 +101,7 @@ async def login(
     "/auth/refresh",
     response_model=TokenResponse,
     dependencies=[Depends(enforce_refresh_rate_limit)],
+    responses=problem_responses(InvalidTokenError),
 )
 async def refresh(
     payload: RefreshTokenRequest,
@@ -112,6 +116,7 @@ async def refresh(
     "/auth/logout",
     status_code=status.HTTP_204_NO_CONTENT,
     dependencies=[Depends(enforce_refresh_rate_limit)],
+    responses=problem_responses(InvalidTokenError),
 )
 async def logout(
     payload: RefreshTokenRequest,
