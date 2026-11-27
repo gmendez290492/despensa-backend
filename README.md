@@ -134,6 +134,9 @@ locations y notifications):
   vuelo y ~420 req/s, la media ronda los 480 ms (ley de Little). Más capacidad = más workers o
   más tareas en ECS.
 - Pool: `DB_POOL_SIZE`, `DB_MAX_OVERFLOW` y `DB_POOL_TIMEOUT_SECONDS` son **por proceso**.
+- **Dashboard:** `GET /api/v1/pantries/{pantry_id}/dashboard` devuelve en una llamada lo mismo
+  que `GET /pantries`, `/pantries/{id}/locations`, `/pantries/{id}/batches` y el `unread_count`
+  de `/notifications` (una sola autenticación y un solo chequeo de membresía; 403 si no eres miembro).
 
 ## URLs útiles en local
 

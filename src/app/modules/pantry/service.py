@@ -1,6 +1,7 @@
 """Lógica de negocio y motor FEFO del módulo pantry con protección IDOR."""
 
 import secrets
+from collections.abc import Sequence
 from datetime import date
 from decimal import Decimal
 from typing import Literal, cast
@@ -17,7 +18,7 @@ from app.modules.pantry.exceptions import (
     ProductNotFoundError,
     UnitNotFoundError,
 )
-from app.modules.pantry.models import Location, Pantry, PantryMember, Product
+from app.modules.pantry.models import FoodBatch, Location, Pantry, PantryMember, Product
 from app.modules.pantry.repository import PantryRepository
 from app.modules.pantry.schemas import (
     BatchConsumeDetail,
@@ -270,8 +271,29 @@ class PantryService:
         """Lista los lotes disponibles calculando el semáforo de caducidad."""
         await self.assert_membership(pantry_id=pantry_id, user_id=user_id)
         batches = await self.pantry_repo.list_batches_by_pantry(pantry_id)
-        today = date.today()
+        return self._batch_responses(batches)
 
+    async def pantry_overview(
+        self,
+        pantry_id: UUID,
+        *,
+        user_id: UUID,
+    ) -> tuple[list[Pantry], list[Location], list[FoodBatchResponse]]:
+        """Despensas del usuario, zonas y lotes disponibles de una de ellas (dashboard).
+
+        La lista de despensas del usuario sirve también de chequeo de membresía (IDOR), así
+        que no hace falta la consulta extra de `assert_membership`.
+        """
+        pantries = await self.list_my_pantries(user_id)
+        if all(p.id != pantry_id for p in pantries):
+            raise PantryAccessDeniedError("Acceso denegado: no eres miembro de esta despensa.")
+        locations = await self.pantry_repo.list_locations_by_pantry(pantry_id)
+        batches = await self.pantry_repo.list_batches_by_pantry(pantry_id)
+        return pantries, list(locations), self._batch_responses(batches)
+
+    @staticmethod
+    def _batch_responses(batches: Sequence[FoodBatch]) -> list[FoodBatchResponse]:
+        today = date.today()
         response = []
         for b in batches:
             dias = (b.expiration_date - today).days

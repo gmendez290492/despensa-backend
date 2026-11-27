@@ -44,6 +44,10 @@ class NotificationService:
             unread_count=unread_count,
         )
 
+    async def unread_count(self, *, user_id: UUID) -> int:
+        """Número de notificaciones sin leer del usuario."""
+        return await self.repo.count_for_user(user_id=user_id, unread_only=True)
+
     async def mark_as_read(
         self,
         *,
