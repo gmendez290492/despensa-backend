@@ -58,15 +58,19 @@ module "compute" {
   jwt_secret_key        = var.jwt_secret_key
   trusted_proxy_cidr    = module.network.vpc_cidr
   frontend_base_url     = var.frontend_base_url
+
+  notifications_queue_url = module.messaging.notifications_queue_url
+  notifications_queue_arn = module.messaging.notifications_queue_arn
+  ses_from_email          = var.ses_from_email
 }
 
 # 5. Control de Costos: Alerta de AWS Budgets a $5 USD
 resource "aws_budgets_budget" "cost_limit" {
-  name              = "despensa-budget-${var.environment}"
-  budget_type       = "COST"
-  limit_amount      = "5.0"
-  limit_unit        = "USD"
-  time_unit         = "MONTHLY"
+  name         = "despensa-budget-${var.environment}"
+  budget_type  = "COST"
+  limit_amount = "5.0"
+  limit_unit   = "USD"
+  time_unit    = "MONTHLY"
 
   notification {
     comparison_operator        = "GREATER_THAN"

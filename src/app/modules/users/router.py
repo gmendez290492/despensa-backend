@@ -9,6 +9,7 @@ from app.core.rate_limit import RateLimiter
 from app.modules.users.dependencies import (
     enforce_auth_rate_limit,
     enforce_email_rate_limit,
+    enforce_refresh_rate_limit,
     enforce_register_rate_limit,
     get_current_user,
     get_rate_limiter,
@@ -93,7 +94,11 @@ async def login(
     return await service.authenticate_user(payload, client_binding=client_binding)
 
 
-@router.post("/auth/refresh", response_model=TokenResponse)
+@router.post(
+    "/auth/refresh",
+    response_model=TokenResponse,
+    dependencies=[Depends(enforce_refresh_rate_limit)],
+)
 async def refresh(
     payload: RefreshTokenRequest,
     service: Annotated[UserService, Depends(get_user_service)],
@@ -103,7 +108,11 @@ async def refresh(
     return await service.refresh_tokens(payload.refresh_token, client_binding=client_binding)
 
 
-@router.post("/auth/logout", status_code=status.HTTP_204_NO_CONTENT)
+@router.post(
+    "/auth/logout",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(enforce_refresh_rate_limit)],
+)
 async def logout(
     payload: RefreshTokenRequest,
     service: Annotated[UserService, Depends(get_user_service)],

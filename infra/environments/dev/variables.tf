@@ -28,6 +28,11 @@ variable "budget_notification_email" {
   default     = "alertas@despensa.local"
 }
 
+variable "ses_from_email" {
+  description = "Remitente de los correos del worker (identidad SES a verificar)"
+  type        = string
+}
+
 variable "frontend_base_url" {
   description = "URL pública del frontend (enlaces de recuperación de contraseña)"
   type        = string
