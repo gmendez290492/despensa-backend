@@ -4,7 +4,9 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi.responses import JSONResponse
 
+from app.core.idempotency import IDEMPOTENCY_RESPONSES, IdempotencyDep
 from app.modules.pantry.dependencies import PantryServiceDep
 from app.modules.pantry.schemas import (
     CategoryResponse,
@@ -36,21 +38,33 @@ CurrentUserDep = Annotated[User, Depends(get_current_user)]
     response_model=PantryResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Crear una nueva despensa",
+    responses=IDEMPOTENCY_RESPONSES,
 )
 async def create_pantry(
     request: Request,
     payload: PantryCreateRequest,
     current_user: CurrentUserDep,
     service: PantryServiceDep,
-) -> PantryResponse:
+    idempotency: IdempotencyDep,
+) -> PantryResponse | JSONResponse:
     """Crea una despensa y convierte al usuario autenticado en su OWNER."""
     correlation_id = getattr(request.state, "correlation_id", "")
-    pantry = await service.create_pantry(
-        payload,
+
+    async def action() -> PantryResponse:
+        pantry = await service.create_pantry(
+            payload,
+            user_id=current_user.id,
+            correlation_id=correlation_id,
+        )
+        return PantryResponse.model_validate(pantry)
+
+    return await idempotency.run(
         user_id=current_user.id,
-        correlation_id=correlation_id,
+        payload=payload,
+        status_code=status.HTTP_201_CREATED,
+        service=service,
+        action=action,
     )
-    return PantryResponse.model_validate(pantry)
 
 
 @router.get(
@@ -71,21 +85,33 @@ async def list_pantries(
     "/pantries/join",
     response_model=PantryResponse,
     summary="Unirse a una despensa mediante código de invitación",
+    responses=IDEMPOTENCY_RESPONSES,
 )
 async def join_pantry(
     request: Request,
     payload: PantryJoinRequest,
     current_user: CurrentUserDep,
     service: PantryServiceDep,
-) -> PantryResponse:
+    idempotency: IdempotencyDep,
+) -> PantryResponse | JSONResponse:
     """Permite compartir una despensa uniendo al usuario con rol de miembro."""
     correlation_id = getattr(request.state, "correlation_id", "")
-    pantry = await service.join_pantry(
-        payload.invite_code,
+
+    async def action() -> PantryResponse:
+        pantry = await service.join_pantry(
+            payload.invite_code,
+            user_id=current_user.id,
+            correlation_id=correlation_id,
+        )
+        return PantryResponse.model_validate(pantry)
+
+    return await idempotency.run(
         user_id=current_user.id,
-        correlation_id=correlation_id,
+        payload=payload,
+        status_code=status.HTTP_200_OK,
+        service=service,
+        action=action,
     )
-    return PantryResponse.model_validate(pantry)
 
 
 # --- UBICACIONES FÍSICAS ---
@@ -96,20 +122,32 @@ async def join_pantry(
     response_model=LocationResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Crear zona de almacenamiento en la despensa",
+    responses=IDEMPOTENCY_RESPONSES,
 )
 async def create_location(
     pantry_id: UUID,
     payload: LocationCreateRequest,
     current_user: CurrentUserDep,
     service: PantryServiceDep,
-) -> LocationResponse:
+    idempotency: IdempotencyDep,
+) -> LocationResponse | JSONResponse:
     """Crea una ubicación física (Refrigerador, Congelador, Alacena) protegida por IDOR."""
-    location = await service.create_location(
-        pantry_id=pantry_id,
-        data=payload,
+
+    async def action() -> LocationResponse:
+        location = await service.create_location(
+            pantry_id=pantry_id,
+            data=payload,
+            user_id=current_user.id,
+        )
+        return LocationResponse.model_validate(location)
+
+    return await idempotency.run(
         user_id=current_user.id,
+        payload=payload,
+        status_code=status.HTTP_201_CREATED,
+        service=service,
+        action=action,
     )
-    return LocationResponse.model_validate(location)
 
 
 @router.get(
@@ -148,15 +186,27 @@ async def list_categories(
     response_model=ProductResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Crear producto en el catálogo maestro",
+    responses=IDEMPOTENCY_RESPONSES,
 )
 async def create_product(
     payload: ProductCreateRequest,
-    _: CurrentUserDep,
+    current_user: CurrentUserDep,
     service: PantryServiceDep,
-) -> ProductResponse:
+    idempotency: IdempotencyDep,
+) -> ProductResponse | JSONResponse:
     """Registra un producto maestro genérico."""
-    product = await service.create_product(payload)
-    return ProductResponse.model_validate(product)
+
+    async def action() -> ProductResponse:
+        product = await service.create_product(payload)
+        return ProductResponse.model_validate(product)
+
+    return await idempotency.run(
+        user_id=current_user.id,
+        payload=payload,
+        status_code=status.HTTP_201_CREATED,
+        service=service,
+        action=action,
+    )
 
 
 @router.get(
@@ -182,6 +232,7 @@ async def list_products(
     response_model=FoodBatchResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Registrar compra de lote de alimento",
+    responses=IDEMPOTENCY_RESPONSES,
 )
 async def add_food_batch(
     request: Request,
@@ -189,14 +240,21 @@ async def add_food_batch(
     payload: FoodBatchCreateRequest,
     current_user: CurrentUserDep,
     service: PantryServiceDep,
-) -> FoodBatchResponse:
+    idempotency: IdempotencyDep,
+) -> FoodBatchResponse | JSONResponse:
     """Agrega un lote físico con fecha de expiración calculando semáforo en tiempo real."""
     correlation_id = getattr(request.state, "correlation_id", "")
-    return await service.add_food_batch(
-        pantry_id=pantry_id,
-        data=payload,
+    return await idempotency.run(
         user_id=current_user.id,
-        correlation_id=correlation_id,
+        payload=payload,
+        status_code=status.HTTP_201_CREATED,
+        service=service,
+        action=lambda: service.add_food_batch(
+            pantry_id=pantry_id,
+            data=payload,
+            user_id=current_user.id,
+            correlation_id=correlation_id,
+        ),
     )
 
 
@@ -218,6 +276,7 @@ async def list_batches(
     "/pantries/{pantry_id}/consume",
     response_model=ConsumeResultResponse,
     summary="Consumir alimento aplicando algoritmo FEFO inteligente",
+    responses=IDEMPOTENCY_RESPONSES,
 )
 async def consume_product(
     request: Request,
@@ -225,12 +284,22 @@ async def consume_product(
     payload: ConsumeRequest,
     current_user: CurrentUserDep,
     service: PantryServiceDep,
-) -> ConsumeResultResponse:
-    """Descuenta stock automáticamente del lote que vence más pronto (First Expired, First Out)."""
+    idempotency: IdempotencyDep,
+) -> ConsumeResultResponse | JSONResponse:
+    """Descuenta stock automáticamente del lote que vence más pronto (First Expired, First Out).
+
+    Con `Idempotency-Key`, un reintento devuelve el resultado original sin volver a descontar.
+    """
     correlation_id = getattr(request.state, "correlation_id", "")
-    return await service.consume_product_fefo(
-        pantry_id=pantry_id,
-        data=payload,
+    return await idempotency.run(
         user_id=current_user.id,
-        correlation_id=correlation_id,
+        payload=payload,
+        status_code=status.HTTP_200_OK,
+        service=service,
+        action=lambda: service.consume_product_fefo(
+            pantry_id=pantry_id,
+            data=payload,
+            user_id=current_user.id,
+            correlation_id=correlation_id,
+        ),
     )

@@ -57,6 +57,24 @@ $env:AUTH_RATE_LIMIT_MAX_ATTEMPTS=1000; $env:REGISTER_RATE_LIMIT_MAX_ATTEMPTS=10
 docker compose up -d api
 ```
 
+## Idempotencia de mutaciones (issue #11)
+
+Las mutaciones de pantry aceptan la cabecera opcional `Idempotency-Key` (`^[A-Za-z0-9_-]{8,128}$`): `POST /pantries`, `/pantries/join`, `/pantries/{id}/locations`, `/products`, `/pantries/{id}/batches` y `/pantries/{id}/consume`. La outbox offline del frontend envía su `clientMutationId` en esa cabecera.
+
+| Caso | Respuesta |
+|---|---|
+| Sin cabecera | Comportamiento de siempre. |
+| Clave nueva | Se ejecuta. El efecto y la respuesta guardada se confirman en el mismo commit. |
+| Misma clave y misma petición (método, ruta y cuerpo) | Se repite la respuesta guardada, con el mismo status y cuerpo, sin ejecutar nada. Lleva `Idempotent-Replayed: true`. |
+| Misma clave y otra petición | `422 idempotency-key-reused`. |
+| Otra petición con la clave en curso | Espera a que termine y repite su respuesta. Si espera más de `IDEMPOTENCY_LOCK_TIMEOUT_MS` (5 s), `409 idempotency-request-in-progress` con `Retry-After`. |
+| Error de negocio 4xx (p. ej. `insufficient-stock`) | Se guarda y se repite igual, aunque el estado cambie después. |
+| Error 5xx | No se guarda: la clave queda libre para reintentar. |
+| Formato inválido | `400 invalid-idempotency-key`. |
+
+- Las claves pertenecen al usuario (`idempotency_keys`, PK `(user_id, key)`): la misma clave de otro usuario no colisiona ni expone su respuesta.
+- Caducan a las `IDEMPOTENCY_KEY_TTL_HOURS` (168 h = 7 días). Una clave caducada se trata como nueva, así que **la outbox del frontend no debe reenviar operaciones más antiguas que el TTL**. Las caducadas se purgan de forma oportunista, sin depender del scheduler.
+
 ## URLs útiles en local
 
 - **Swagger UI (API):** http://localhost:8000/docs

@@ -60,6 +60,12 @@ class Settings(BaseSettings):
     auth_email_rate_limit_max_attempts: int = 10
     auth_email_rate_limit_window_seconds: int = 900
 
+    # Idempotencia (Idempotency-Key) de mutaciones. El TTL cubre la outbox offline del
+    # frontend: una operación más antigua que esto ya no se protege ante duplicados.
+    idempotency_key_ttl_hours: int = Field(default=168, ge=1)
+    # Espera máxima a otra petición en curso con la misma clave antes del 409.
+    idempotency_lock_timeout_ms: int = Field(default=5000, ge=100)
+
     # Configuración de AWS / LocalStack / AWS Emulator
     aws_endpoint_url: str | None = None
     aws_default_region: str = "us-east-1"

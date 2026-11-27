@@ -51,6 +51,14 @@ class PantryService:
         self.session = session
         self.pantry_repo = PantryRepository(session)
         self.outbox_repo = OutboxRepository(session)
+        # Con Idempotency-Key, el guardián hace el commit junto con la respuesta guardada.
+        self.defer_commit = False
+
+    async def _commit(self) -> None:
+        if self.defer_commit:
+            await self.session.flush()
+        else:
+            await self.session.commit()
 
     async def assert_membership(self, *, pantry_id: UUID, user_id: UUID) -> PantryMember:
         """Escudo IDOR: garantiza que el usuario pertenece a la despensa consultada."""
@@ -92,7 +100,7 @@ class PantryService:
             aggregate_id=str(pantry.id),
         )
 
-        await self.session.commit()
+        await self._commit()
         return pantry
 
     async def join_pantry(
@@ -124,7 +132,7 @@ class PantryService:
             aggregate_id=str(pantry.id),
         )
 
-        await self.session.commit()
+        await self._commit()
         return pantry
 
     async def list_my_pantries(self, user_id: UUID) -> list[Pantry]:
@@ -146,7 +154,7 @@ class PantryService:
             name=data.name,
             description=data.description,
         )
-        await self.session.commit()
+        await self._commit()
         return location
 
     async def list_locations(self, pantry_id: UUID, *, user_id: UUID) -> list[Location]:
@@ -172,7 +180,7 @@ class PantryService:
             barcode=data.barcode,
             estimated_shelf_life_days=data.estimated_shelf_life_days,
         )
-        await self.session.commit()
+        await self._commit()
         return product
 
     async def add_food_batch(
@@ -234,7 +242,7 @@ class PantryService:
             aggregate_id=str(batch.id),
         )
 
-        await self.session.commit()
+        await self._commit()
 
         dias = (batch.expiration_date - date.today()).days
         return FoodBatchResponse(
@@ -364,7 +372,7 @@ class PantryService:
             aggregate_id=str(pantry_id),
         )
 
-        await self.session.commit()
+        await self._commit()
 
         remaining_total = total_available - data.quantity
         return ConsumeResultResponse(
